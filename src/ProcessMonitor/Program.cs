@@ -16,6 +16,7 @@ namespace ProcessMonitor
             "ProcessLog.csv");
         private static readonly object dictLock = new object();
         private static ManualResetEventSlim exitEvent = new ManualResetEventSlim(false);
+        private static Timer timer;
 
         static void Main(string[] args)
         {
@@ -47,9 +48,22 @@ namespace ProcessMonitor
             finally
             {
                 exitEvent.Set();
+                timer?.Dispose();
                 Console.WriteLine("正在退出...");
                 Thread.Sleep(1000); // 等待最后一次保存
             }
+        }
+
+        // 添加缺失的方法定义
+        static bool CheckWindowsVersion()
+        {
+            var os = Environment.OSVersion;
+            if (os.Platform != PlatformID.Win32NT || os.Version.Major < 6 || (os.Version.Major == 6 && os.Version.Minor < 1))
+            {
+                Console.WriteLine("需要Windows 7或更高版本");
+                return false;
+            }
+            return true;
         }
 
         static bool CheckAdministrator()
@@ -64,7 +78,27 @@ namespace ProcessMonitor
             try
             {
                 Console.WriteLine("正在初始化进程列表...");
-                // [保持原有初始化逻辑]
+                foreach (var process in Process.GetProcesses())
+                {
+                    try
+                    {
+                        lock (dictLock)
+                        {
+                            processDict[process.Id] = new ProcessRecord
+                            {
+                                Pid = process.Id,
+                                ProcessName = GetProcessNameSafe(process),
+                                StartTime = "-",
+                                EndTime = "-"
+                            };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"初始化时跳过进程 {process.Id}: {ex.Message}");
+                    }
+                }
+                SaveToFile();
                 Console.WriteLine($"已初始化 {processDict.Count} 个进程");
             }
             catch (Exception ex)
@@ -76,41 +110,141 @@ namespace ProcessMonitor
 
         static void StartMonitoring()
         {
-            var timer = new Timer(1000);
-            timer.Elapsed += (sender, e) => 
-            {
-                try
-                {
-                    CheckProcessChanges();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"监控出错：{ex.Message}");
-                }
-            };
-            timer.Change(0, 1000);
-
+            timer = new Timer(CheckProcessChangesWrapper, null, 0, 1000);
             exitEvent.Wait();
-            timer.Dispose();
+        }
+
+        // 修正Timer回调方法
+        private static void CheckProcessChangesWrapper(object state)
+        {
+            try
+            {
+                CheckProcessChanges();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"监控出错：{ex.Message}");
+            }
         }
 
         static void CheckProcessChanges()
         {
-            // [保持原有监控逻辑]
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss} 检测到 {changesCount} 处变更");
+            try
+            {
+                var currentProcesses = Process.GetProcesses();
+                var currentPids = new HashSet<int>();
+                int changesCount = 0;
+
+                foreach (var process in currentProcesses)
+                {
+                    try
+                    {
+                        currentPids.Add(process.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"跳过无效进程: {ex.Message}");
+                    }
+                }
+
+                lock (dictLock)
+                {
+                    // 检查退出的进程
+                    var exitedPids = processDict.Keys.Except(currentPids).ToList();
+                    if (exitedPids.Count > 0)
+                    {
+                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                        foreach (var pid in exitedPids)
+                        {
+                            processDict[pid].EndTime = timestamp;
+                        }
+                        changesCount += exitedPids.Count;
+                    }
+
+                    // 检查新进程
+                    foreach (var process in currentProcesses)
+                    {
+                        try
+                        {
+                            if (!processDict.ContainsKey(process.Id))
+                            {
+                                processDict[process.Id] = new ProcessRecord
+                                {
+                                    Pid = process.Id,
+                                    ProcessName = GetProcessNameSafe(process),
+                                    StartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                                    EndTime = "-"
+                                };
+                                changesCount++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"跳过新进程 {process.Id}: {ex.Message}");
+                        }
+                    }
+                }
+
+                if (changesCount > 0)
+                {
+                    SaveToFile();
+                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} 检测到 {changesCount} 处变更");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"监控出错: {ex.Message}");
+            }
         }
 
         static void SaveToFile()
         {
             try
             {
-                // [保持原有保存逻辑]
-                Console.WriteLine($"{DateTime.Now:HH:mm:ss} 成功保存日志");
+                List<ProcessRecord> records;
+                lock (dictLock)
+                {
+                    records = processDict.Values.ToList();
+                }
+
+                using (var writer = new StreamWriter(logFilePath, false))
+                {
+                    writer.WriteLine("PID,ProcessName,StartTime,EndTime");
+                    foreach (var record in records.OrderBy(r => r.Pid))
+                    {
+                        writer.WriteLine($"{record.Pid}," +
+                                       $"{EscapeCsv(record.ProcessName)}," +
+                                       $"{EscapeCsv(record.StartTime)}," +
+                                       $"{EscapeCsv(record.EndTime)}");
+                    }
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"保存失败：{ex.Message}");
+                Console.WriteLine($"保存失败: {ex.Message}");
             }
+        }
+
+        static string GetProcessNameSafe(Process process)
+        {
+            try
+            {
+                return process.ProcessName;
+            }
+            catch
+            {
+                return "Unknown";
+            }
+        }
+
+        static string EscapeCsv(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return "";
+            if (input.Contains(",") || input.Contains("\"") || input.Contains("\n"))
+            {
+                return $"\"{input.Replace("\"", "\"\"")}\"";
+            }
+            return input;
         }
     }
 

@@ -1,21 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType> <!-- 改为控制台应用 -->
+    <OutputType>Exe</OutputType>
     <TargetFramework>net6.0-windows</TargetFramework>
     <RuntimeIdentifiers>win7-x86;win7-x64</RuntimeIdentifiers>
     <Platforms>x86;x64</Platforms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     
-    <!-- 输出目录配置 -->
     <OutputPath>bin\$(Platform)\$(Configuration)</OutputPath>
     <AppendRuntimeIdentifierToOutputPath>true</AppendRuntimeIdentifierToOutputPath>
     
-    <!-- 安全设置 -->
     <SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
     <PlatformTarget>$(Platform)</PlatformTarget>
     
-    <!-- 发布设置 -->
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <PublishSingleFile>true</PublishSingleFile>
@@ -23,7 +20,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="6.0.3" />
+    <!-- 升级到安全版本 -->
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="7.0.0" />
   </ItemGroup>
 
 </Project>
