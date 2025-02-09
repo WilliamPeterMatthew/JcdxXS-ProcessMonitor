@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Threading;
+using System.IO;  // 添加缺失的命名空间
 
 namespace ProcessMonitor
 {
@@ -32,10 +33,10 @@ namespace ProcessMonitor
                 "ProcessMonitor",
                 $"ProcessLog_{timestamp}.csv");
 
-            // 创建托盘图标
+            // 创建托盘图标（修复Icon初始化问题）
             trayIcon = new NotifyIcon
             {
-                Icon = new Icon(GetEmbeddedResource("ProcessMonitor.app.ico")),
+                Icon = GetEmbeddedIcon("ProcessMonitor.app.ico"),  // 直接使用Icon对象
                 Text = "进程监控器",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
@@ -47,7 +48,7 @@ namespace ProcessMonitor
             Program.StartMonitoring(logFilePath);
         }
 
-        private Icon GetEmbeddedResource(string resourceName)
+        private Icon GetEmbeddedIcon(string resourceName)
         {
             using var stream = GetType().Assembly.GetManifestResourceStream(resourceName);
             return stream != null ? new Icon(stream) : SystemIcons.Application;
