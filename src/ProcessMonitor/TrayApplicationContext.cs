@@ -36,7 +36,7 @@ namespace ProcessMonitor
             // 创建托盘图标（修复Icon初始化问题）
             trayIcon = new NotifyIcon
             {
-                Icon = GetEmbeddedIcon("ProcessMonitor.app.ico"),  // 直接使用Icon对象
+                Icon = GetEmbeddedIcon(), // 直接调用修正后的方法
                 Text = "进程监控器",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
@@ -48,8 +48,10 @@ namespace ProcessMonitor
             Program.StartMonitoring(logFilePath);
         }
 
-        private Icon GetEmbeddedIcon(string resourceName)
+        private Icon GetEmbeddedIcon()
         {
+            // 使用完整资源路径
+            const string resourceName = "ProcessMonitor.Resources.app.ico";
             using var stream = GetType().Assembly.GetManifestResourceStream(resourceName);
             return stream != null ? new Icon(stream) : SystemIcons.Application;
         }

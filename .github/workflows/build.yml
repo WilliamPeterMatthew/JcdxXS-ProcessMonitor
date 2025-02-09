@@ -17,6 +17,17 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # 确保获取所有历史记录和资源文件
+
+    - name: Verify resources
+      run: |
+        ls -R # 显示目录结构
+        if (-not (Test-Path "resources/app.ico")) {
+            Write-Error "图标文件缺失！"
+            exit 1
+        }
+      shell: powershell
 
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
