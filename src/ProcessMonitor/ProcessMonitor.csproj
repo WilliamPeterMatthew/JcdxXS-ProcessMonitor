@@ -3,13 +3,18 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <RuntimeIdentifiers>win7-x86;win7-x64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <Platforms>x86;x64</Platforms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>resources\app.ico</ApplicationIcon>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PlatformTarget>$(Platform)</PlatformTarget>
+    
+    <!-- Windows 7兼容性设置 -->
+    <SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
   </PropertyGroup>
 
   <ItemGroup>

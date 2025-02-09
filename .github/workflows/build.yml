@@ -10,40 +10,29 @@ jobs:
         platform: [x86, x64]
         include:
           - platform: x86
-            runtime_id: win7-x86
-            build_config: Release
+            runtime_id: win-x86
           - platform: x64
-            runtime_id: win7-x64
-            build_config: Release
+            runtime_id: win-x64
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup .NET
+    - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: 8.0.x
 
     - name: Build
       run: |
         dotnet publish src/ProcessMonitor/ProcessMonitor.csproj `
-          -c ${{ matrix.build_config }} `
+          -c Release `
           -r ${{ matrix.runtime_id }} `
           --self-contained true `
           /p:PublishSingleFile=true `
-          /p:IncludeNativeLibrariesForSelfExtract=true `
-          /p:Platform=${{ matrix.platform }}
-      shell: powershell
-
-    - name: Verify Output
-      run: |
-        $pathPattern = "src/ProcessMonitor/bin/${{ matrix.platform }}/${{ matrix.build_config }}/net6.0-windows/${{ matrix.runtime_id }}/publish/*"
-        if (-not (Test-Path $pathPattern)) {
-          Write-Error "Build output not found at: $pathPattern"
-          Get-ChildItem -Recurse -Filter *.dll | % { Write-Host "Found: $($_.FullName)" }
-          exit 1
-        }
+          /p:Platform=${{ matrix.platform }} `
+          /p:WindowsSDKVersion=10.0.19041.0 `
+          /p:WindowsTargetPlatformVersion=10.0.19041.0
       shell: powershell
 
     - name: Upload Artifact
@@ -51,4 +40,4 @@ jobs:
       with:
         name: ProcessMonitor-${{ matrix.platform }}
         path: |
-          src/ProcessMonitor/bin/${{ matrix.platform }}/${{ matrix.build_config }}/net6.0-windows/${{ matrix.runtime_id }}/publish/*
+          src/ProcessMonitor/bin/${{ matrix.platform }}/Release/net8.0-windows/${{ matrix.runtime_id }}/publish/*

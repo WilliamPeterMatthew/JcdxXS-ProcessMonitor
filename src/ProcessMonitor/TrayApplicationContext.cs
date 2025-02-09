@@ -13,6 +13,15 @@ namespace ProcessMonitor
 
         public TrayApplicationContext()
         {
+            // Windows版本检测
+            if (!IsWindows7OrNewer())
+            {
+                MessageBox.Show("需要Windows 7或更高版本", "系统要求", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ExitThread();
+                return;
+            }
+
             // 单实例检测
             bool isNewInstance;
             instanceMutex = new Mutex(true, "Global\\ProcessMonitorMutex", out isNewInstance);
@@ -52,6 +61,14 @@ namespace ProcessMonitor
                 ShowErrorMessage($"监控启动失败: {ex.Message}");
                 ExitThread();
             }
+        }
+
+        private bool IsWindows7OrNewer()
+        {
+            var os = Environment.OSVersion;
+            return os.Platform == PlatformID.Win32NT && 
+                  (os.Version.Major > 6 || 
+                  (os.Version.Major == 6 && os.Version.Minor >= 1));
         }
 
         private Icon GetEmbeddedResource(string name)
