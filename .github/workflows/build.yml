@@ -22,11 +22,9 @@ jobs:
 
     - name: Verify resources
       run: |
-        # 显示完整目录结构
-        tree /F
-        # 验证资源文件存在
         if (-not (Test-Path "resources/app.ico")) {
-            Write-Error "图标文件未找到！正确路径应为：$pwd\resources\app.ico"
+            Write-Error "图标文件未找到！当前路径：$pwd"
+            Get-ChildItem -Recurse
             exit 1
         }
       shell: powershell
@@ -44,8 +42,7 @@ jobs:
           --self-contained true `
           /p:PublishSingleFile=true `
           /p:Platform=${{ matrix.platform }} `
-          /p:WindowsSDKVersion=10.0.19041.0 `
-          /p:WindowsTargetPlatformVersion=10.0.19041.0
+          /p:WindowsSDKVersion=10.0.19041.0
       shell: powershell
 
     - name: Upload Artifact

@@ -25,7 +25,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 修正资源路径 -->
     <EmbeddedResource Include="..\..\resources\app.ico">
       <Link>Resources\app.ico</Link>
     </EmbeddedResource>

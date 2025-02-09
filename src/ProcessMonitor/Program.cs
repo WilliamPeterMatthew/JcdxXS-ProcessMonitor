@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading; // 保留线程相关
+using System.Threading;
 using System.Windows.Forms;
 
 namespace ProcessMonitor
@@ -11,7 +11,7 @@ namespace ProcessMonitor
     static class Program
     {
         private static Dictionary<int, ProcessRecord> processDict;
-        private static System.Threading.Timer monitoringTimer; // 明确指定类型
+        private static System.Threading.Timer monitoringTimer;
         private static string currentLogPath;
         private static readonly object syncLock = new object();
 
@@ -29,7 +29,7 @@ namespace ProcessMonitor
             Directory.CreateDirectory(Path.GetDirectoryName(logPath));
 
             InitializeProcessLog();
-            monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000); // 明确初始化
+            monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000);
         }
 
         public static void StopMonitoring()
@@ -84,19 +84,14 @@ namespace ProcessMonitor
 
                 lock (syncLock)
                 {
-                    // 处理退出的进程
                     var exitedPids = processDict.Keys.Except(activePids).ToList();
                     if (exitedPids.Count > 0)
                     {
                         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                        foreach (var pid in exitedPids)
-                        {
-                            processDict[pid].EndTime = timestamp;
-                        }
+                        foreach (var pid in exitedPids) processDict[pid].EndTime = timestamp;
                         hasChanges = true;
                     }
 
-                    // 处理新进程
                     foreach (var process in currentProcesses)
                     {
                         try
