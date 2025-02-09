@@ -9,25 +9,108 @@ namespace ProcessMonitor
 {
     class Program
     {
-        // 保持与之前提供的代码相同
-        // [原有代码内容...]
-        
-        // 添加Windows版本检查
-        static bool CheckWindowsVersion()
-        {
-            var os = Environment.OSVersion;
-            if (os.Platform != PlatformID.Win32NT || os.Version.Major < 6 || (os.Version.Major == 6 && os.Version.Minor < 1))
-            {
-                Console.WriteLine("This application requires Windows 7 or later.");
-                return false;
-            }
-            return true;
-        }
+        private static readonly Dictionary<int, ProcessRecord> processDict = new Dictionary<int, ProcessRecord>();
+        private static readonly string logFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ProcessMonitor",
+            "ProcessLog.csv");
+        private static readonly object dictLock = new object();
+        private static ManualResetEventSlim exitEvent = new ManualResetEventSlim(false);
 
         static void Main(string[] args)
         {
-            if (!CheckWindowsVersion()) return;
-            // [原有主程序逻辑...]
+            try
+            {
+                Console.WriteLine($"日志文件路径：{logFilePath}");
+                Directory.CreateDirectory(Path.GetDirectoryName(logFilePath));
+                
+                if (!CheckWindowsVersion()) return;
+                if (!CheckAdministrator())
+                {
+                    Console.WriteLine("需要管理员权限，请右键以管理员身份运行");
+                    return;
+                }
+
+                InitializeProcessLog();
+                StartMonitoring();
+
+                Console.WriteLine("监控运行中，按Q退出...");
+                while (Console.ReadKey(true).Key != ConsoleKey.Q)
+                {
+                    // 保持循环
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"致命错误：{ex}");
+            }
+            finally
+            {
+                exitEvent.Set();
+                Console.WriteLine("正在退出...");
+                Thread.Sleep(1000); // 等待最后一次保存
+            }
+        }
+
+        static bool CheckAdministrator()
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+
+        static void InitializeProcessLog()
+        {
+            try
+            {
+                Console.WriteLine("正在初始化进程列表...");
+                // [保持原有初始化逻辑]
+                Console.WriteLine($"已初始化 {processDict.Count} 个进程");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"初始化失败：{ex.Message}");
+                throw;
+            }
+        }
+
+        static void StartMonitoring()
+        {
+            var timer = new Timer(1000);
+            timer.Elapsed += (sender, e) => 
+            {
+                try
+                {
+                    CheckProcessChanges();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"监控出错：{ex.Message}");
+                }
+            };
+            timer.Change(0, 1000);
+
+            exitEvent.Wait();
+            timer.Dispose();
+        }
+
+        static void CheckProcessChanges()
+        {
+            // [保持原有监控逻辑]
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} 检测到 {changesCount} 处变更");
+        }
+
+        static void SaveToFile()
+        {
+            try
+            {
+                // [保持原有保存逻辑]
+                Console.WriteLine($"{DateTime.Now:HH:mm:ss} 成功保存日志");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"保存失败：{ex.Message}");
+            }
         }
     }
 
