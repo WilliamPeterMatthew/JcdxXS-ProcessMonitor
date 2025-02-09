@@ -15,9 +15,9 @@ namespace ProcessMonitor
         private static string currentLogPath;
         private static readonly object syncLock = new object();
 
-        // 新增监控时间记录
-        private static DateTime _monitorStartTime = DateTime.Now;
-        private static DateTime _monitorLastUpdate = DateTime.Now;
+        // 添加监控时间字段
+        private static DateTime _monitorStartTime;
+        private static DateTime _monitorLastUpdate;
 
         [STAThread]
         static void Main()
@@ -29,6 +29,8 @@ namespace ProcessMonitor
         public static void StartMonitoring(string logPath)
         {
             currentLogPath = logPath;
+            _monitorStartTime = DateTime.Now;
+            _monitorLastUpdate = _monitorStartTime;
             processDict = new Dictionary<int, ProcessRecord>();
             Directory.CreateDirectory(Path.GetDirectoryName(logPath));
 
@@ -38,19 +40,8 @@ namespace ProcessMonitor
 
         public static void StopMonitoring()
         {
-            try
-            {
-                monitoringTimer?.Dispose();
-                
-                // 添加最终监控结束记录
-                var endTime = DateTime.Now;
-                File.AppendAllText(currentLogPath, 
-                    $"\nMonitorEndTime,{endTime:yyyy-MM-dd HH:mm:ss}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"退出保存失败: {ex}");
-            }
+            monitoringTimer?.Dispose();
+            SaveToFile();
         }
 
         private static void InitializeProcessLog()
@@ -150,20 +141,14 @@ namespace ProcessMonitor
             {
                 try
                 {
-                    // 更新最后记录时间
                     _monitorLastUpdate = DateTime.Now;
                     
-                    var records = processDict.Values.ToList();
                     using var writer = new StreamWriter(currentLogPath, false);
-                    
-                    // 添加监控时间头信息
-                    writer.WriteLine($"MonitorStartTime,{_monitorStartTime:yyyy-MM-dd HH:mm:ss}");
-                    writer.WriteLine($"MonitorLastUpdate,{_monitorLastUpdate:yyyy-MM-dd HH:mm:ss}");
-                    writer.WriteLine(); // 空行分隔
-                    
-                    // 原有进程记录
+                    // 只在文件头记录时间范围
+                    writer.WriteLine($"MonitorPeriod,{_monitorStartTime:yyyy-MM-dd HH:mm:ss},{_monitorLastUpdate:yyyy-MM-dd HH:mm:ss}");
                     writer.WriteLine("PID,ProcessName,StartTime,EndTime");
-                    foreach (var record in records.OrderBy(r => r.Pid))
+                    
+                    foreach (var record in processDict.Values.OrderBy(r => r.Pid))
                     {
                         writer.WriteLine($"{record.Pid}," +
                                     $"{EscapeCsv(record.ProcessName)}," +
