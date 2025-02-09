@@ -18,7 +18,8 @@ namespace ProcessMonitor
         [STAThread]
         static void Main()
         {
-            ApplicationConfiguration.Initialize();
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new TrayApplicationContext());
         }
 
@@ -27,31 +28,31 @@ namespace ProcessMonitor
             currentLogPath = logPath;
             processDict = new Dictionary<int, ProcessRecord>();
             Directory.CreateDirectory(Path.GetDirectoryName(logPath));
+
             InitializeProcessLog();
-            monitoringTimer = new Timer(CheckProcessUpdates, null, 0, 1000);
+            monitoringTimer = new Timer(CheckProcessChanges, null, 0, 1000);
         }
 
         public static void StopMonitoring()
         {
             monitoringTimer?.Dispose();
-            SaveLogToFile();
+            SaveToFile();
         }
 
         private static void InitializeProcessLog()
         {
             try
             {
-                var initialProcesses = Process.GetProcesses();
-                foreach (var proc in initialProcesses)
+                foreach (var process in Process.GetProcesses())
                 {
                     try
                     {
                         lock (syncLock)
                         {
-                            processDict[proc.Id] = new ProcessRecord
+                            processDict[process.Id] = new ProcessRecord
                             {
-                                Pid = proc.Id,
-                                ProcessName = SafeGetProcessName(proc),
+                                Pid = process.Id,
+                                ProcessName = GetProcessNameSafe(process),
                                 StartTime = "-",
                                 EndTime = "-"
                             };
@@ -59,15 +60,16 @@ namespace ProcessMonitor
                     }
                     catch { /* 忽略无效进程 */ }
                 }
-                SaveLogToFile();
+                SaveToFile();
             }
             catch (Exception ex)
             {
-                throw new ApplicationException("初始化进程列表失败: " + ex.Message);
+                MessageBox.Show($"初始化失败: {ex.Message}", "错误", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private static void CheckProcessUpdates(object state)
+        private static void CheckProcessChanges(object state)
         {
             try
             {
@@ -75,21 +77,20 @@ namespace ProcessMonitor
                 var activePids = new HashSet<int>();
                 bool hasChanges = false;
 
-                // 收集当前有效PID
-                foreach (var proc in currentProcesses)
+                foreach (var process in currentProcesses)
                 {
-                    try { activePids.Add(proc.Id); }
+                    try { activePids.Add(process.Id); }
                     catch { /* 忽略无效进程 */ }
                 }
 
                 lock (syncLock)
                 {
-                    // 处理已退出的进程
-                    var exited = processDict.Keys.Except(activePids).ToArray();
-                    if (exited.Length > 0)
+                    // 处理退出的进程
+                    var exitedPids = processDict.Keys.Except(activePids).ToList();
+                    if (exitedPids.Count > 0)
                     {
                         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                        foreach (var pid in exited)
+                        foreach (var pid in exitedPids)
                         {
                             processDict[pid].EndTime = timestamp;
                         }
@@ -97,16 +98,16 @@ namespace ProcessMonitor
                     }
 
                     // 处理新进程
-                    foreach (var proc in currentProcesses)
+                    foreach (var process in currentProcesses)
                     {
                         try
                         {
-                            if (!processDict.ContainsKey(proc.Id))
+                            if (!processDict.ContainsKey(process.Id))
                             {
-                                processDict[proc.Id] = new ProcessRecord
+                                processDict[process.Id] = new ProcessRecord
                                 {
-                                    Pid = proc.Id,
-                                    ProcessName = SafeGetProcessName(proc),
+                                    Pid = process.Id,
+                                    ProcessName = GetProcessNameSafe(process),
                                     StartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                                     EndTime = "-"
                                 };
@@ -117,23 +118,24 @@ namespace ProcessMonitor
                     }
                 }
 
-                if (hasChanges) SaveLogToFile();
+                if (hasChanges) SaveToFile();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"监控异常: {ex}");
+                Debug.WriteLine($"监控错误: {ex}");
             }
         }
 
-        private static void SaveLogToFile()
+        private static void SaveToFile()
         {
-            try
+            lock (syncLock)
             {
-                lock (syncLock)
+                try
                 {
+                    var records = processDict.Values.ToList();
                     using var writer = new StreamWriter(currentLogPath, false);
                     writer.WriteLine("PID,ProcessName,StartTime,EndTime");
-                    foreach (var record in processDict.Values.OrderBy(r => r.Pid))
+                    foreach (var record in records.OrderBy(r => r.Pid))
                     {
                         writer.WriteLine($"{record.Pid}," +
                                        $"{EscapeCsv(record.ProcessName)}," +
@@ -141,14 +143,14 @@ namespace ProcessMonitor
                                        $"{EscapeCsv(record.EndTime)}");
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"日志保存失败: {ex}");
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"保存失败: {ex}");
+                }
             }
         }
 
-        private static string SafeGetProcessName(Process process)
+        private static string GetProcessNameSafe(Process process)
         {
             try { return process.ProcessName; }
             catch { return "Unknown"; }
@@ -156,12 +158,10 @@ namespace ProcessMonitor
 
         private static string EscapeCsv(string input)
         {
-            if (string.IsNullOrEmpty(input)) return string.Empty;
-            if (input.Contains(",") || input.Contains("\"") || input.Contains("\n"))
-            {
-                return $"\"{input.Replace("\"", "\"\"")}\"";
-            }
-            return input;
+            if (string.IsNullOrEmpty(input)) return "";
+            return input.Contains(",") || input.Contains("\"") || input.Contains("\n") 
+                ? $"\"{input.Replace("\"", "\"\"")}\"" 
+                : input;
         }
     }
 }

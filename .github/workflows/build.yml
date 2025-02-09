@@ -31,13 +31,11 @@ jobs:
           --self-contained true `
           /p:PublishSingleFile=true `
           /p:Platform=${{ matrix.platform }} `
-          /p:WindowsSDKVersion=10.0.19041.0 `
-          /p:WindowsTargetPlatformVersion=10.0.19041.0
+          /p:WindowsSDKVersion=10.0.19041.0
       shell: powershell
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ProcessMonitor-${{ matrix.platform }}
-        path: |
-          src/ProcessMonitor/bin/${{ matrix.platform }}/Release/net8.0-windows/${{ matrix.runtime_id }}/publish/*
+        path: src/ProcessMonitor/bin/${{ matrix.platform }}/Release/net8.0-windows/${{ matrix.runtime_id }}/publish/*

@@ -8,27 +8,19 @@ namespace ProcessMonitor
     public class TrayApplicationContext : ApplicationContext
     {
         private readonly NotifyIcon trayIcon;
-        private static Mutex instanceMutex;
+        private static Mutex appMutex;
         private readonly string logFilePath;
 
         public TrayApplicationContext()
         {
-            // Windows版本检测
-            if (!IsWindows7OrNewer())
-            {
-                MessageBox.Show("需要Windows 7或更高版本", "系统要求", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                ExitThread();
-                return;
-            }
-
             // 单实例检测
-            bool isNewInstance;
-            instanceMutex = new Mutex(true, "Global\\ProcessMonitorMutex", out isNewInstance);
-
-            if (!isNewInstance)
+            bool createdNew;
+            appMutex = new Mutex(true, "Global\\ProcessMonitor", out createdNew);
+            
+            if (!createdNew)
             {
-                ShowErrorMessage("程序已经在后台运行");
+                MessageBox.Show("程序已在运行中", "提示", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                 ExitThread();
                 return;
             }
@@ -43,47 +35,22 @@ namespace ProcessMonitor
             // 创建托盘图标
             trayIcon = new NotifyIcon
             {
-                Icon = new Icon(GetEmbeddedResource("ProcessMonitor.app.ico")),
-                Text = "进程监控器 v1.0",
+                Icon = new Icon(GetType().Assembly.GetManifestResourceStream("ProcessMonitor.app.ico")),
+                Text = "进程监控器",
                 Visible = true,
-                ContextMenuStrip = BuildContextMenu()
+                ContextMenuStrip = CreateContextMenu()
             };
 
-            trayIcon.ShowBalloonTip(3000, "监控启动", "后台监控已开始运行", ToolTipIcon.Info);
+            trayIcon.ShowBalloonTip(3000, "监控启动", "后台监控已运行", ToolTipIcon.Info);
 
             // 启动监控
-            try
-            {
-                Program.StartMonitoring(logFilePath);
-            }
-            catch (Exception ex)
-            {
-                ShowErrorMessage($"监控启动失败: {ex.Message}");
-                ExitThread();
-            }
+            Program.StartMonitoring(logFilePath);
         }
 
-        private bool IsWindows7OrNewer()
-        {
-            var os = Environment.OSVersion;
-            return os.Platform == PlatformID.Win32NT && 
-                  (os.Version.Major > 6 || 
-                  (os.Version.Major == 6 && os.Version.Minor >= 1));
-        }
-
-        private Icon GetEmbeddedResource(string name)
-        {
-            using var stream = GetType().Assembly.GetManifestResourceStream(name);
-            return new Icon(stream);
-        }
-
-        private ContextMenuStrip BuildContextMenu()
+        private ContextMenuStrip CreateContextMenu()
         {
             var menu = new ContextMenuStrip();
-            menu.Items.AddRange(new ToolStripItem[]
-            {
-                new ToolStripMenuItem("退出", null, ExitApplication)
-            });
+            menu.Items.Add("退出", null, ExitApplication);
             return menu;
         }
 
@@ -91,22 +58,13 @@ namespace ProcessMonitor
         {
             trayIcon.Visible = false;
             Program.StopMonitoring();
-            instanceMutex?.ReleaseMutex();
+            appMutex?.ReleaseMutex();
             Application.Exit();
-        }
-
-        private void ShowErrorMessage(string message)
-        {
-            MessageBox.Show(message, "错误", 
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
-            {
-                trayIcon?.Dispose();
-            }
+            trayIcon?.Dispose();
             base.Dispose(disposing);
         }
     }
