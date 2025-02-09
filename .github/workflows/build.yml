@@ -1,0 +1,43 @@
+name: Build Process Monitor
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform: [x86, x64]
+        include:
+          - platform: x86
+            runtime_id: win7-x86
+            build_config: Release-Win7-x86
+          - platform: x64
+            runtime_id: win7-x64
+            build_config: Release-Win7-x64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 6.0.x
+
+    - name: Build
+      run: |
+        dotnet publish src/ProcessMonitor/ProcessMonitor.csproj ^
+          -c ${{ matrix.build_config }} ^
+          -r ${{ matrix.runtime_id }} ^
+          --self-contained true ^
+          -p:PublishSingleFile=true ^
+          -p:IncludeNativeLibrariesForSelfExtract=true
+
+    - name: Archive Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ProcessMonitor-${{ matrix.platform }}
+        path: |
+          src/ProcessMonitor/bin/${{ matrix.build_config }}/net6.0-windows/${{ matrix.runtime_id }}/publish/*
+        retention-days: 7

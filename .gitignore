@@ -1,0 +1,16 @@
+# 忽略构建输出
+bin/
+obj/
+artifacts/
+
+# 忽略用户特定文件
+.vs/
+*.user
+*.suo
+
+# 忽略包目录
+packages/
+
+# 忽略IDE相关
+.idea/
+.vscode/
