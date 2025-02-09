@@ -6,21 +6,20 @@
     <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <Platforms>x86;x64</Platforms>
     
-    <!-- 添加Windows Forms支持 -->
+    <!-- Windows配置 -->
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>resources\app.ico</ApplicationIcon>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     
-    <!-- Windows兼容性设置 -->
-    <SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
+    <!-- SDK版本设置 -->
     <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
     <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    
+    <!-- 兼容性设置 -->
+    <SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 更新依赖项 -->
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>

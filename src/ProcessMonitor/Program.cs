@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading;
+using System.Threading; // 保留线程相关
 using System.Windows.Forms;
 
 namespace ProcessMonitor
@@ -11,15 +11,14 @@ namespace ProcessMonitor
     static class Program
     {
         private static Dictionary<int, ProcessRecord> processDict;
-        private static Timer monitoringTimer;
+        private static System.Threading.Timer monitoringTimer; // 明确指定类型
         private static string currentLogPath;
         private static readonly object syncLock = new object();
 
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            ApplicationConfiguration.Initialize();
             Application.Run(new TrayApplicationContext());
         }
 
@@ -30,7 +29,7 @@ namespace ProcessMonitor
             Directory.CreateDirectory(Path.GetDirectoryName(logPath));
 
             InitializeProcessLog();
-            monitoringTimer = new Timer(CheckProcessChanges, null, 0, 1000);
+            monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000); // 明确初始化
         }
 
         public static void StopMonitoring()
