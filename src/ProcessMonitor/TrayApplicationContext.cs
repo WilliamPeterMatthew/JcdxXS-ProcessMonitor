@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Threading;
+using System.IO;
 
 namespace ProcessMonitor
 {
@@ -35,7 +36,7 @@ namespace ProcessMonitor
             // 创建托盘图标
             trayIcon = new NotifyIcon
             {
-                Icon = new Icon(GetType().Assembly.GetManifestResourceStream("ProcessMonitor.app.ico")),
+                Icon = new Icon(GetEmbeddedResource("ProcessMonitor.app.ico")),
                 Text = "进程监控器",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
@@ -47,14 +48,22 @@ namespace ProcessMonitor
             Program.StartMonitoring(logFilePath);
         }
 
+        private Icon GetEmbeddedResource(string resourceName)
+        {
+            using var stream = GetType().Assembly.GetManifestResourceStream(resourceName);
+            return stream != null ? new Icon(stream) : SystemIcons.Application;
+        }
+
         private ContextMenuStrip CreateContextMenu()
         {
             var menu = new ContextMenuStrip();
-            menu.Items.Add("退出", null, ExitApplication);
+            var exitItem = new ToolStripMenuItem("退出");
+            exitItem.Click += (s, e) => ExitApplication();
+            menu.Items.Add(exitItem);
             return menu;
         }
 
-        private void ExitApplication(object sender, EventArgs e)
+        private void ExitApplication()
         {
             trayIcon.Visible = false;
             Program.StopMonitoring();
@@ -64,7 +73,11 @@ namespace ProcessMonitor
 
         protected override void Dispose(bool disposing)
         {
-            trayIcon?.Dispose();
+            if (disposing)
+            {
+                trayIcon?.Dispose();
+                appMutex?.Close();
+            }
             base.Dispose(disposing);
         }
     }
