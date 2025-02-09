@@ -84,14 +84,23 @@ namespace ProcessMonitor
 
                 lock (syncLock)
                 {
+                    // 处理退出的进程（仅首次标记退出时间）
                     var exitedPids = processDict.Keys.Except(activePids).ToList();
                     if (exitedPids.Count > 0)
                     {
                         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                        foreach (var pid in exitedPids) processDict[pid].EndTime = timestamp;
-                        hasChanges = true;
+                        foreach (var pid in exitedPids)
+                        {
+                            // 仅当退出时间未设置时更新
+                            if (processDict[pid].EndTime == "-")
+                            {
+                                processDict[pid].EndTime = timestamp;
+                                hasChanges = true;
+                            }
+                        }
                     }
 
+                    // 处理新进程（保持原有逻辑）
                     foreach (var process in currentProcesses)
                     {
                         try
