@@ -15,15 +15,18 @@ namespace ProcessMonitor
 
         public TrayApplicationContext()
         {
-            // 单实例检测
+            // 单实例检测（添加Global前缀确保跨会话）
             bool createdNew;
-            appMutex = new Mutex(true, "Global\\ProcessMonitor", out createdNew);
+            appMutex = new Mutex(true, @"Global\ProcessMonitor", out createdNew);
             
             if (!createdNew)
             {
                 MessageBox.Show("程序已在运行中", "提示", 
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
-                ExitThread();
+                
+                // 完全退出应用程序
+                Application.Exit();
+                Environment.Exit(0);
                 return;
             }
 
