@@ -16,6 +16,7 @@
     <!-- Windows兼容性设置 -->
     <SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
     <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
 
   <ItemGroup>
