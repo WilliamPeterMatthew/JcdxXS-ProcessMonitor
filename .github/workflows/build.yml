@@ -18,13 +18,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # 确保获取所有历史记录和资源文件
+        fetch-depth: 0
 
     - name: Verify resources
       run: |
-        ls -R # 显示目录结构
+        # 显示完整目录结构
+        tree /F
+        # 验证资源文件存在
         if (-not (Test-Path "resources/app.ico")) {
-            Write-Error "图标文件缺失！"
+            Write-Error "图标文件未找到！正确路径应为：$pwd\resources\app.ico"
             exit 1
         }
       shell: powershell
