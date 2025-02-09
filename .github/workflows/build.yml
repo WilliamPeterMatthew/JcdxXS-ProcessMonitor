@@ -18,10 +18,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4  # 使用最新checkout版本
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4  # 升级到v4版本
       with:
         dotnet-version: 6.0.x
 
@@ -34,10 +34,10 @@ jobs:
           -p:PublishSingleFile=true ^
           -p:IncludeNativeLibrariesForSelfExtract=true
 
-    - name: Archive Artifacts
-      uses: actions/upload-artifact@v3
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4  # 升级到v4版本
       with:
         name: ProcessMonitor-${{ matrix.platform }}
         path: |
           src/ProcessMonitor/bin/${{ matrix.build_config }}/net6.0-windows/${{ matrix.runtime_id }}/publish/*
-        retention-days: 7
+        # retention-days参数已废弃，需在仓库设置中配置保留策略
