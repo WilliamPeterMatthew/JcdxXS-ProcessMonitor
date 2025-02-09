@@ -8,19 +8,18 @@ namespace ProcessMonitor
     public class TrayApplicationContext : ApplicationContext
     {
         private readonly NotifyIcon trayIcon;
-        private static Mutex appMutex;
+        private static Mutex instanceMutex;
         private readonly string logFilePath;
 
         public TrayApplicationContext()
         {
             // 单实例检测
             bool isNewInstance;
-            appMutex = new Mutex(true, "Global\\ProcessMonitor", out isNewInstance);
+            instanceMutex = new Mutex(true, "Global\\ProcessMonitorMutex", out isNewInstance);
 
             if (!isNewInstance)
             {
-                MessageBox.Show("程序已在运行中", "提示", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowErrorMessage("程序已经在后台运行");
                 ExitThread();
                 return;
             }
@@ -35,37 +34,62 @@ namespace ProcessMonitor
             // 创建托盘图标
             trayIcon = new NotifyIcon
             {
-                Icon = new Icon(GetType().Assembly.GetManifestResourceStream("ProcessMonitor.app.ico")),
-                Text = "进程监控器",
+                Icon = new Icon(GetEmbeddedResource("ProcessMonitor.app.ico")),
+                Text = "进程监控器 v1.0",
                 Visible = true,
-                ContextMenuStrip = CreateContextMenu()
+                ContextMenuStrip = BuildContextMenu()
             };
 
-            // 显示启动提示
-            trayIcon.ShowBalloonTip(3000, "进程监控", "监控已后台运行", ToolTipIcon.Info);
+            trayIcon.ShowBalloonTip(3000, "监控启动", "后台监控已开始运行", ToolTipIcon.Info);
 
             // 启动监控
-            Program.StartMonitoring(logFilePath);
+            try
+            {
+                Program.StartMonitoring(logFilePath);
+            }
+            catch (Exception ex)
+            {
+                ShowErrorMessage($"监控启动失败: {ex.Message}");
+                ExitThread();
+            }
         }
 
-        private ContextMenuStrip CreateContextMenu()
+        private Icon GetEmbeddedResource(string name)
+        {
+            using var stream = GetType().Assembly.GetManifestResourceStream(name);
+            return new Icon(stream);
+        }
+
+        private ContextMenuStrip BuildContextMenu()
         {
             var menu = new ContextMenuStrip();
-            menu.Items.Add("退出", null, OnExit);
+            menu.Items.AddRange(new ToolStripItem[]
+            {
+                new ToolStripMenuItem("退出", null, ExitApplication)
+            });
             return menu;
         }
 
-        private void OnExit(object sender, EventArgs e)
+        private void ExitApplication(object sender, EventArgs e)
         {
             trayIcon.Visible = false;
             Program.StopMonitoring();
-            appMutex?.ReleaseMutex();
+            instanceMutex?.ReleaseMutex();
             Application.Exit();
+        }
+
+        private void ShowErrorMessage(string message)
+        {
+            MessageBox.Show(message, "错误", 
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
         protected override void Dispose(bool disposing)
         {
-            trayIcon?.Dispose();
+            if (disposing)
+            {
+                trayIcon?.Dispose();
+            }
             base.Dispose(disposing);
         }
     }
