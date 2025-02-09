@@ -27,12 +27,14 @@ jobs:
 
     - name: Build
       run: |
-        dotnet publish src/ProcessMonitor/ProcessMonitor.csproj ^
-          -c ${{ matrix.build_config }} ^
-          -r ${{ matrix.runtime_id }} ^
-          --self-contained true ^
-          -p:PublishSingleFile=true ^
-          -p:IncludeNativeLibrariesForSelfExtract=true
+        dotnet publish src/ProcessMonitor/ProcessMonitor.csproj `
+          -c ${{ matrix.build_config }} `
+          -r ${{ matrix.runtime_id }} `
+          --self-contained true `
+          /p:PublishSingleFile=true `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          /p:Platform=${{ matrix.platform }}
+      shell: powershell
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4  # 升级到v4版本
