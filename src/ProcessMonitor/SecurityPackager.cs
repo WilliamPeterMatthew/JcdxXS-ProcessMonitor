@@ -30,10 +30,13 @@ namespace ProcessMonitor
                 using (var fs = new FileStream(outputFile, FileMode.Create))
                 using (var zip = new ZipOutputStream(fs))
                 {
-                    zip.SetLevel(9);
+                    // 配置AES加密
                     zip.Password = ZipPassword;
+                    zip.SetLevel(9);
+                    zip.UseZip64 = UseZip64.Off;
+                    zip.AESKeySize = 256; // 启用AES-256加密
                     zip.SetComment(encryptedHash);
-                    
+
                     var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories)
                                      .OrderBy(p => p).ToList();
 
