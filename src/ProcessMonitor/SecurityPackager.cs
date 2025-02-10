@@ -13,11 +13,6 @@ namespace ProcessMonitor
         const string CryptoKey = "cppuapa";
         const string ZipPassword = "CPPUAPA";
         
-    public static class SecurityPackager
-    {
-        const string CryptoKey = "cppuapa";
-        const string ZipPassword = "CPPUAPA";
-        
         public static void PackageLogs(string sourceDir)
         {
             try
