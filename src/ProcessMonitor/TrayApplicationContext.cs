@@ -81,6 +81,9 @@ namespace ProcessMonitor
             Program.StopMonitoring();
             appMutex?.ReleaseMutex();
             Application.Exit();
+            
+            // 立即退出不等待
+            Environment.Exit(0); 
         }
 
         protected override void Dispose(bool disposing)

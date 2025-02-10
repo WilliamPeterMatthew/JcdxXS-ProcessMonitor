@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="DotNetZip" Version="1.16.0" />
     <EmbeddedResource Include="..\..\resources\app.ico">
       <Link>Resources\app.ico</Link>
     </EmbeddedResource>

@@ -19,9 +19,22 @@ namespace ProcessMonitor
         private static DateTime _monitorStartTime;
         private static DateTime _monitorLastUpdate;
 
+        // 添加日志目录属性
+        public static string LogDirectory => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ProcessMonitor");
+
+    
+        // 添加全局异常处理
         [STAThread]
         static void Main()
         {
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => 
+            {
+                SecurityPackager.PackageLogs(LogDirectory);
+                Environment.FailFast("Critical error", e.ExceptionObject as Exception);
+            };
+            
             ApplicationConfiguration.Initialize();
             Application.Run(new TrayApplicationContext());
         }
@@ -40,8 +53,17 @@ namespace ProcessMonitor
 
         public static void StopMonitoring()
         {
-            monitoringTimer?.Dispose();
-            SaveToFile();
+            try
+            {
+                monitoringTimer?.Dispose();
+                SaveToFile();
+                SecurityPackager.PackageLogs(LogDirectory);
+            }
+            catch (Exception ex)
+            {
+                File.AppendAllText(Path.Combine(LogDirectory, "error.log"), 
+                    $"[{DateTime.Now}] Exit error: {ex}\n");
+            }
         }
 
         private static void InitializeProcessLog()
