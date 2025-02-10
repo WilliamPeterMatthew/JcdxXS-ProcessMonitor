@@ -4,7 +4,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using ICSharpCode.SharpZipLib.Zip;
-using ICSharpCode.SharpZipLib.Aes;
 
 namespace ProcessMonitor
 {
@@ -42,8 +41,12 @@ namespace ProcessMonitor
 
                     foreach (var file in files)
                     {
-                        var entry = new ZipEntry(Path.GetFileName(file));
-                        entry.DateTime = DateTime.Now;
+                        var entryName = Path.GetRelativePath(sourceDir, file);
+                        var entry = new ZipEntry(entryName)
+                        {
+                            DateTime = DateTime.Now,
+                            AESKeySize = 256 // 为每个条目设置AES加密
+                        };
                         
                         using (var fileStream = File.OpenRead(file))
                         {
@@ -105,8 +108,19 @@ namespace ProcessMonitor
 
         private static bool ValidatePackage(string zipPath, string expectedHash)
         {
-            using var zip = ZipFile.Read(zipPath);
-            return zip.Comment == expectedHash;
+            try
+            {
+                using var fs = File.OpenRead(zipPath);
+                using var zip = new ZipFile(fs)
+                {
+                    Password = ZipPassword
+                };
+                return zip.ZipFileComment == expectedHash;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static byte[] DeriveKey(string password)
