@@ -1,11 +1,18 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using Ionic.Zip;
+using ICSharpCode.SharpZipLib.Zip;
+using ICSharpCode.SharpZipLib.Aes;
 
 namespace ProcessMonitor
 {
+    public static class SecurityPackager
+    {
+        const string CryptoKey = "cppuapa";
+        const string ZipPassword = "CPPUAPA";
+        
     public static class SecurityPackager
     {
         const string CryptoKey = "cppuapa";
@@ -25,12 +32,28 @@ namespace ProcessMonitor
                 // AES加密哈希值
                 var encryptedHash = EncryptHash(hash);
                 
-                using (var zip = new ZipFile())
+                using (var fs = new FileStream(outputFile, FileMode.Create))
+                using (var zip = new ZipOutputStream(fs))
                 {
+                    zip.SetLevel(9);
                     zip.Password = ZipPassword;
-                    zip.Comment = encryptedHash;
-                    zip.AddDirectory(sourceDir, "");
-                    zip.Save(outputFile);
+                    zip.SetComment(encryptedHash);
+                    
+                    var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories)
+                                     .OrderBy(p => p).ToList();
+
+                    foreach (var file in files)
+                    {
+                        var entry = new ZipEntry(Path.GetFileName(file));
+                        entry.DateTime = DateTime.Now;
+                        
+                        using (var fileStream = File.OpenRead(file))
+                        {
+                            zip.PutNextEntry(entry);
+                            fileStream.CopyTo(zip);
+                            zip.CloseEntry();
+                        }
+                    }
                 }
 
                 // 验证打包完整性
