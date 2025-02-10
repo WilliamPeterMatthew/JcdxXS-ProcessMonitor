@@ -29,12 +29,9 @@ namespace ProcessMonitor
                 using (var fs = new FileStream(outputFile, FileMode.Create))
                 using (var zip = new ZipOutputStream(fs))
                 {
-                    // 配置AES加密
                     zip.Password = ZipPassword;
                     zip.SetLevel(9);
                     zip.UseZip64 = UseZip64.Off;
-                    zip.AESKeySize = 256; // 启用AES-256加密
-                    zip.SetComment(encryptedHash);
 
                     var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories)
                                      .OrderBy(p => p).ToList();
@@ -45,7 +42,7 @@ namespace ProcessMonitor
                         var entry = new ZipEntry(entryName)
                         {
                             DateTime = DateTime.Now,
-                            AESKeySize = 256 // 为每个条目设置AES加密
+                            AESKeySize = 256 // 正确设置AES加密
                         };
                         
                         using (var fileStream = File.OpenRead(file))
@@ -55,6 +52,8 @@ namespace ProcessMonitor
                             zip.CloseEntry();
                         }
                     }
+                    
+                    zip.SetComment(encryptedHash); // 最后设置注释
                 }
 
                 // 验证打包完整性
