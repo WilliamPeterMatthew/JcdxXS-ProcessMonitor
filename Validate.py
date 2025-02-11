@@ -1,88 +1,121 @@
 import argparse
 import os
-import pyzipper
 import hashlib
+import tempfile
 import shutil
-from Crypto.Cipher import AES  # 导入 AES 加密模块
-
-# 定义常量
-ZIP_PASSWORD = b'CPPUAPA'  # ZIP 文件的密码
-AES_KEY = b'cppuapa'  # AES 加密的密钥
-AES_IV = b'\x00' * 16  # 固定的 IV（16 字节全零）
-
-def extract_zip(zip_path, extract_to):
-    """解压带密码的 ZIP 文件"""
-    with pyzipper.AESZipFile(zip_path, 'r', encryption=pyzipper.WZ_AES) as zf:
-        zf.setpassword(ZIP_PASSWORD)
-        zf.extractall(extract_to)
-        print(f'解压完成，文件已提取到 {extract_to}')
-
-def get_zip_comment(zip_path):
-    """获取 ZIP 文件的注释"""
-    with pyzipper.AESZipFile(zip_path, 'r', encryption=pyzipper.WZ_AES) as zf:
-        zf.setpassword(ZIP_PASSWORD)
-        return zf.comment.decode('utf-8')
-
-def decrypt_hash(encrypted_hash):
-    """解密 AES 加密的哈希值"""
-    cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
-    decrypted = cipher.decrypt(bytes.fromhex(encrypted_hash))
-    return decrypted.rstrip(b'\x00').decode('utf-8')
-
-def calculate_directory_hash(directory):
-    """计算目录的 MD5 哈希值"""
-    md5 = hashlib.md5()
-    for root, dirs, files in os.walk(directory):
-        for file in sorted(files):
-            file_path = os.path.join(root, file)
-            with open(file_path, 'rb') as f:
-                while chunk := f.read(8192):
-                    md5.update(chunk)
-    return md5.hexdigest()
-
-def validate_package(zip_path, extract_to):
-    """验证包的完整性"""
-    # 获取 ZIP 文件的注释（包含加密的哈希值）
-    encrypted_hash = get_zip_comment(zip_path)
-    # 解密哈希值
-    original_hash = decrypt_hash(encrypted_hash)
-    # 计算解压后的目录的哈希值
-    current_hash = calculate_directory_hash(extract_to)
-    # 比较哈希值
-    if original_hash == current_hash:
-        print('文件未被篡改')
-    else:
-        print('文件已被篡改')
+import pyzipper
+from Crypto.Cipher import AES
+from Crypto.Hash import SHA256
+import base64
 
 def main():
-    # 创建命令行参数解析器
-    parser = argparse.ArgumentParser(description='验证 PMR 文件的完整性')
-    parser.add_argument('pmr_file', help='PMR 文件路径')
-    parser.add_argument('-e', '--extract', help='解压目录路径')
+    parser = argparse.ArgumentParser(description='Validate a PMR file integrity.')
+    parser.add_argument('pmr_file', help='Path to the PMR file to validate')
+    parser.add_argument('-e', '--extract-dir', help='Directory to extract files (optional)')
     args = parser.parse_args()
 
-    # 检查是否指定了 PMR 文件路径
-    if not args.pmr_file:
-        print('错误：未指定 PMR 文件路径。请使用 -h 或 --help 查看帮助信息。')
-        exit(1)
-
-    # 如果未指定解压目录，则使用临时目录
-    if not args.extract:
-        temp_dir = 'temp_extracted_files'
-        os.makedirs(temp_dir, exist_ok=True)
-    else:
-        temp_dir = args.extract
-
+    # 读取ZIP文件注释（加密哈希值）
     try:
-        # 解压文件
-        extract_zip(args.pmr_file, temp_dir)
-        # 验证包的完整性
-        validate_package(args.pmr_file, temp_dir)
-    finally:
-        # 如果使用了临时目录，则删除
-        if not args.extract and os.path.exists(temp_dir):
+        with pyzipper.AESZipFile(args.pmr_file, 'r') as zf:
+            zf.setpassword(b'CPPUAPA')
+            stored_hash = zf.comment.decode('utf-8')
+    except Exception as e:
+        print(f"❌ 文件读取失败: {str(e)}")
+        return
+
+    # 处理解压目录
+    temp_dir = None
+    extract_to = args.extract_dir
+    if not extract_to:
+        temp_dir = tempfile.mkdtemp()
+        extract_to = temp_dir
+    else:
+        os.makedirs(extract_to, exist_ok=True)
+
+    # 解压文件
+    try:
+        with pyzipper.AESZipFile(args.pmr_file, 'r') as zf:
+            zf.setpassword(b'CPPUAPA')
+            zf.extractall(path=extract_to)
+    except Exception as e:
+        print(f"❌ 解压失败: {str(e)}")
+        if temp_dir:
             shutil.rmtree(temp_dir)
-            print(f'临时解压目录 {temp_dir} 已删除')
+        return
+
+    # 计算当前哈希
+    try:
+        current_hash = calculate_directory_hash(extract_to)
+    except Exception as e:
+        print(f"❌ 哈希计算失败: {str(e)}")
+        if temp_dir:
+            shutil.rmtree(temp_dir)
+        return
+
+    # 加密当前哈希
+    try:
+        encrypted_current = encrypt_hash(current_hash)
+    except Exception as e:
+        print(f"❌ 哈希加密失败: {str(e)}")
+        if temp_dir:
+            shutil.rmtree(temp_dir)
+        return
+
+    # 验证结果
+    if encrypted_current == stored_hash:
+        print("✅ 验证成功：文件完整未被篡改")
+    else:
+        print(f"❌ 验证失败：哈希值不匹配\n存储值: {stored_hash}\n计算值: {encrypted_current}")
+
+    # 清理临时目录
+    if temp_dir:
+        shutil.rmtree(temp_dir)
+
+def calculate_directory_hash(directory):
+    """计算目录哈希（与C#实现一致）"""
+    md5 = hashlib.md5()
+    
+    # 获取并排序文件列表（相对路径小写）
+    file_list = []
+    for root, _, files in os.walk(directory):
+        for file in files:
+            full_path = os.path.join(root, file)
+            rel_path = os.path.relpath(full_path, directory).lower()
+            file_list.append((rel_path, full_path))
+    
+    # 按路径排序
+    file_list.sort(key=lambda x: x[0])
+    
+    # 计算哈希
+    for rel_path, full_path in file_list:
+        # 文件名哈希
+        md5.update(rel_path.encode('utf-8'))
+        # 文件内容哈希
+        with open(full_path, 'rb') as f:
+            content_hash = hashlib.md5(f.read()).digest()
+            md5.update(content_hash)
+    
+    return md5.hexdigest().lower()
+
+def encrypt_hash(hash_str):
+    """AES加密哈希值（与C#实现一致）"""
+    # 生成密钥
+    sha256 = SHA256.new()
+    sha256.update(b'cppuapa')
+    key = sha256.digest()
+    
+    # 初始化加密器
+    iv = b'\x00' * 16
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    
+    # PKCS7填充
+    data = hash_str.encode('utf-8')
+    pad_len = AES.block_size - (len(data) % AES.block_size)
+    data += bytes([pad_len] * pad_len)
+    
+    # 加密并编码
+    encrypted = cipher.encrypt(data)
+    return base64.b64encode(encrypted).decode('utf-8')
 
 if __name__ == '__main__':
     main()
