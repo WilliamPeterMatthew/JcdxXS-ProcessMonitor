@@ -22,7 +22,9 @@ namespace ProcessMonitor
             {
                 MessageBox.Show("程序已在运行中", "提示", 
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
-                ExitThread();
+                appMutex?.Close();
+                Application.Exit();
+                Environment.Exit(0);
                 return;
             }
 
@@ -84,6 +86,7 @@ namespace ProcessMonitor
             trayIcon?.Dispose();
             Program.StopMonitoring();
             appMutex?.ReleaseMutex();
+            appMutex?.Close();
             Application.Exit();
             Environment.Exit(0);
         }
