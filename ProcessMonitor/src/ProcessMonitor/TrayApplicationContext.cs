@@ -9,9 +9,9 @@ namespace ProcessMonitor
 {
     public class TrayApplicationContext : ApplicationContext
     {
-        private readonly NotifyIcon? trayIcon; // 允许 null
-        private static Mutex? appMutex; // 允许 null
-        private readonly string? logFilePath; // 允许 null
+        private readonly NotifyIcon? trayIcon;
+        private static Mutex? appMutex;
+        private readonly string? logFilePath;
 
         public TrayApplicationContext()
         {
@@ -32,19 +32,28 @@ namespace ProcessMonitor
                 "ProcessMonitor",
                 $"ProcessLog_{timestamp}.csv");
 
-            trayIcon = new NotifyIcon
+            try
             {
-                Icon = GetEmbeddedIcon("ProcessMonitor.Resources.app.ico"),
-                Text = "进程监控器",
-                Visible = true,
-                ContextMenuStrip = CreateContextMenu()
-            };
+                trayIcon = new NotifyIcon
+                {
+                    Icon = GetEmbeddedIcon("ProcessMonitor.Resources.app.ico"),
+                    Text = "进程监控器",
+                    Visible = true,
+                    ContextMenuStrip = CreateContextMenu()
+                };
 
-            trayIcon.ShowBalloonTip(3000, "监控启动", "后台监控已运行", ToolTipIcon.Info);
+                trayIcon.ShowBalloonTip(3000, "监控启动", "后台监控已运行", ToolTipIcon.Info);
 
-            if (logFilePath != null)
+                if (logFilePath != null)
+                {
+                    Program.StartMonitoring(logFilePath);
+                }
+            }
+            catch (Exception ex)
             {
-                Program.StartMonitoring(logFilePath);
+                MessageBox.Show($"初始化失败: {ex.Message}", "错误", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ExitThread();
             }
         }
 
@@ -72,7 +81,7 @@ namespace ProcessMonitor
 
         private void ExitApplication()
         {
-            trayIcon.Visible = false;
+            trayIcon?.Dispose();
             Program.StopMonitoring();
             appMutex?.ReleaseMutex();
             Application.Exit();
