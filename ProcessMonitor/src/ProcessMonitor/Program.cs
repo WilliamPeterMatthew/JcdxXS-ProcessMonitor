@@ -11,9 +11,9 @@ namespace ProcessMonitor
 {
     static class Program
     {
-        private static Dictionary<int, ProcessRecord>? processDict;
+        private static Dictionary<int, ProcessRecord> processDict = new Dictionary<int, ProcessRecord>();
         private static System.Threading.Timer? monitoringTimer;
-        private static string? currentLogPath;
+        private static string currentLogPath = string.Empty;
         private static readonly object syncLock = new object();
         private static DateTime _monitorStartTime;
 
@@ -26,15 +26,14 @@ namespace ProcessMonitor
 
         public static void StartMonitoring(string logPath)
         {
+            if (string.IsNullOrWhiteSpace(logPath))
+                throw new ArgumentException("日志路径不能为空", nameof(logPath));
+
             currentLogPath = logPath;
             _monitorStartTime = DateTime.UtcNow;
-            processDict = new Dictionary<int, ProcessRecord>();
             
-            var dir = Path.GetDirectoryName(logPath);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
+            var dir = Path.GetDirectoryName(logPath)!;
+            Directory.CreateDirectory(dir);
 
             InitializeProcessLog();
             monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000);
@@ -99,15 +98,17 @@ namespace ProcessMonitor
 
                 lock (syncLock)
                 {
+                    if (processDict == null) return;
+
                     var exitedPids = processDict.Keys.Except(activePids).ToList();
                     if (exitedPids.Count > 0)
                     {
                         var timestamp = FormatUtcTime(DateTime.UtcNow);
                         foreach (var pid in exitedPids)
                         {
-                            if (processDict[pid].EndTime == "-")
+                            if (processDict.TryGetValue(pid, out var record) && record.EndTime == "-")
                             {
-                                processDict[pid].EndTime = timestamp;
+                                record.EndTime = timestamp;
                                 hasChanges = true;
                             }
                         }
@@ -149,6 +150,8 @@ namespace ProcessMonitor
             {
                 try
                 {
+                    if (string.IsNullOrEmpty(currentLogPath)) return;
+
                     var records = processDict.Values
                         .Select(r => new {
                             r.Pid,
@@ -163,9 +166,9 @@ namespace ProcessMonitor
                     foreach (var record in records.OrderBy(r => r.Pid))
                     {
                         writer.WriteLine($"{record.Pid}," +
-                                       $"{EscapeCsv(record.ProcessName)}," +
-                                       $"{EscapeCsv(record.StartTime)}," +
-                                       $"{EscapeCsv(record.EndTime)}");
+                                    $"{EscapeCsv(record.ProcessName)}," +
+                                    $"{EscapeCsv(record.StartTime)}," +
+                                    $"{EscapeCsv(record.EndTime)}");
                     }
                 }
                 catch (Exception ex)
