@@ -11,7 +11,7 @@
     <!-- Windows配置 -->
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\..\resources\app.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\..\resources\app.ico</ApplicationIcon>
     
     <!-- SDK版本设置 -->
     <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
@@ -29,7 +29,7 @@
   <ItemGroup>
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
-    <EmbeddedResource Include="..\..\resources\app.ico">
+    <EmbeddedResource Include="..\..\..\resources\app.ico">
       <Link>Resources\app.ico</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="app.manifest" />
