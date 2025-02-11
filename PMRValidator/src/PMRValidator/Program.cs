@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using CommandLine;
@@ -12,10 +13,10 @@ namespace PMRValidator
         public class Options
         {
             [Value(0, Required = true, HelpText = "Input .pmr file path")]
-            public string InputFile { get; set; }
+            public required string InputFile { get; set; } // 添加required修饰符
 
             [Option('e', "extract", HelpText = "Extract directory")]
-            public string ExtractPath { get; set; }
+            public string? ExtractPath { get; set; } // 允许null值
         }
 
         const string ZipPassword = "CPPUAPA";
@@ -33,21 +34,26 @@ namespace PMRValidator
         {
             try
             {
-                // 验证输入文件
+                // 空值检查
+                if (string.IsNullOrEmpty(options.InputFile))
+                {
+                    Console.WriteLine("错误：必须指定输入文件");
+                    return 2;
+                }
+
                 if (!File.Exists(options.InputFile))
                 {
                     Console.WriteLine($"错误：文件 {options.InputFile} 不存在");
-                    return 2;
+                    return 3;
                 }
 
                 // 准备解压路径
                 var tempExtract = string.IsNullOrEmpty(options.ExtractPath);
                 var extractDir = options.ExtractPath ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
+                string zipFile = Path.ChangeExtension(options.InputFile, ".zip");
                 try
                 {
-                    // 重命名文件并解压
-                    var zipFile = Path.ChangeExtension(options.InputFile, ".zip");
                     File.Copy(options.InputFile, zipFile, true);
 
                     // 解压文件
@@ -61,15 +67,22 @@ namespace PMRValidator
                         if (string.IsNullOrEmpty(encryptedHash))
                         {
                             Console.WriteLine("错误：文件注释丢失");
-                            return 3;
+                            return 4;
                         }
 
                         // 解压文件
                         Directory.CreateDirectory(extractDir);
                         foreach (ZipEntry entry in zip)
                         {
+                            if (string.IsNullOrEmpty(entry.Name)) continue;
+
                             var targetPath = Path.Combine(extractDir, entry.Name);
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                            var targetDir = Path.GetDirectoryName(targetPath);
+                            
+                            if (!string.IsNullOrEmpty(targetDir))
+                            {
+                                Directory.CreateDirectory(targetDir);
+                            }
                             
                             using (var entryStream = zip.GetInputStream(entry))
                             using (var fsOutput = File.Create(targetPath))
@@ -88,7 +101,7 @@ namespace PMRValidator
                         if (actualHash != decryptedHash)
                         {
                             Console.WriteLine("验证失败：文件已被篡改");
-                            return 4;
+                            return 5;
                         }
                     }
 
@@ -98,8 +111,11 @@ namespace PMRValidator
                 finally
                 {
                     // 清理临时文件
-                    File.Delete(zipFile);
-                    if (tempExtract)
+                    if (File.Exists(zipFile))
+                    {
+                        File.Delete(zipFile);
+                    }
+                    if (tempExtract && Directory.Exists(extractDir))
                     {
                         Directory.Delete(extractDir, true);
                     }
@@ -108,7 +124,7 @@ namespace PMRValidator
             catch (Exception ex)
             {
                 Console.WriteLine($"验证错误: {ex.Message}");
-                return 5;
+                return 6;
             }
         }
 
@@ -130,7 +146,7 @@ namespace PMRValidator
             }
             
             md5.TransformFinalBlock(new byte[0], 0, 0);
-            return BitConverter.ToString(md5.Hash).Replace("-", "").ToLower();
+            return BitConverter.ToString(md5.Hash!).Replace("-", "").ToLower(); // 添加null包容符
         }
 
         static string DecryptHash(string encryptedHash)
