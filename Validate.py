@@ -84,42 +84,47 @@ def calculate_directory_hash(directory):
     """完全对齐C#实现的哈希计算"""
     md5 = hashlib.md5()
     
-    # 修复1：按原始路径排序（区分大小写）
+    # 修复1：严格模拟C#的路径处理逻辑
     file_list = []
     for root, _, files in os.walk(directory):
-        files = [f for f in files if not f.startswith('.')]  # 过滤隐藏文件
+        # 修复2：过滤隐藏文件（与C#行为一致）
+        files = [f for f in files if not f.startswith('.')]
         for file in files:
             full_path = os.path.join(root, file)
+            # 修复3：使用与C#完全相同的相对路径计算方式
             rel_path = os.path.relpath(full_path, directory)
-            # 修复2：统一使用正斜杠
-            rel_path = rel_path.replace(os.sep, '/')
+            # 修复4：强制转换为小写并统一使用Windows路径分隔符
+            rel_path = rel_path.replace(os.sep, '\\').lower()
             file_list.append((rel_path, full_path))
     
-    # 修复3：按字符串自然排序
-    file_list.sort(key=lambda x: x[0].lower())  # C#的OrderBy(p => p)实际是大小写敏感排序
+    # 修复5：严格按小写路径排序（模拟C#的OrderBy）
+    file_list.sort(key=lambda x: x[0])
     
     for rel_path, full_path in file_list:
-        # 修复4：使用原始路径字节（包括大小写）
+        # 修复6：精确模拟C#的TransformBlock调用
         md5.update(rel_path.encode('utf-8'))
         
-        # 修复5：整个文件内容哈希（非分块）
+        # 修复7：完全复制C#的文件内容哈希方式
         with open(full_path, 'rb') as f:
-            file_md5 = hashlib.md5(f.read()).digest()
-            md5.update(file_md5)
+            file_content = f.read()
+            file_hash = hashlib.md5(file_content).digest()
+            md5.update(file_hash)
     
     return md5.hexdigest().lower()
 
 def encrypt_hash(hash_str):
-    """严格对齐C#加密实现"""
-    # 修复6：恢复CBC模式+零IV
+    """精确复制C#加密流程"""
+    # 修复8：使用正确的密钥派生方式
     key = SHA256.new(b'cppuapa').digest()
-    iv = b'\x00'*16
+    
+    # 修复9：恢复CBC模式+零IV
+    iv = b'\x00' * 16
     cipher = AES.new(key, AES.MODE_CBC, iv)
     
-    # 修复7：精确填充处理
+    # 修复10：精确填充处理
     data = hash_str.encode('utf-8')
     pad_len = AES.block_size - (len(data) % AES.block_size)
-    data += bytes([pad_len]) * pad_len
+    data += bytes([pad_len] * pad_len)
     
     encrypted = cipher.encrypt(data)
     return base64.b64encode(encrypted).decode('utf-8')
