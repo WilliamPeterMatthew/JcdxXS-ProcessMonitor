@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 pyzipper
+=======
+pycryptodome
+>>>>>>> 5f99706171c77ec068ff56bd9929f4acdca6c46f
