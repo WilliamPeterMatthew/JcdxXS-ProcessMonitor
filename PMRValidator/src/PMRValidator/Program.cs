@@ -21,19 +21,20 @@ namespace PMRValidator
 
         const string ZipPassword = "CPPUAPA";
         const string CryptoKey = "cppuapa";
+        private static readonly byte[] FixedIV = 
+            new byte[16] { 0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x10 };
 
         static int Main(string[] args)
         {
-            Console.WriteLine("PMR 文件验证工具 v1.0");
-            Console.WriteLine("=====================\n");
+            Console.WriteLine("PMR 文件验证工具 v1.0.0");
+            Console.WriteLine("==================================\n");
             
             return Parser.Default.ParseArguments<Options>(args).MapResult(
                 options => RunValidation(options),
                 errors => 
                 {
-                    Console.WriteLine("参数解析错误：");
-                    foreach (var error in errors)
-                        Console.WriteLine($"- {error.Tag}");
+                    Console.WriteLine("参数错误：");
+                    errors.ToList().ForEach(e => Console.WriteLine($"- {e.Tag}"));
                     return 1;
                 }
             );
@@ -43,44 +44,40 @@ namespace PMRValidator
         {
             try
             {
-                Console.WriteLine($"输入文件: {options.InputFile}");
-                Console.WriteLine($"解压目录: {options.ExtractPath ?? "[临时目录]"}");
-                Console.WriteLine(new string('-', 50));
+                Console.WriteLine($"输入文件\t: {options.InputFile}");
+                Console.WriteLine($"解压目录\t: {options.ExtractPath ?? "[自动清理临时目录]"}");
+                Console.WriteLine(new string('=', 60));
 
-                // 验证输入文件
                 if (!File.Exists(options.InputFile))
                 {
-                    Console.WriteLine($"✖ 错误：文件 {options.InputFile} 不存在");
+                    Console.WriteLine("✖ 错误：指定的文件不存在");
                     return 2;
                 }
 
-                // 准备解压路径
                 var tempExtract = string.IsNullOrEmpty(options.ExtractPath);
                 var extractDir = options.ExtractPath ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+                var zipFile = Path.ChangeExtension(options.InputFile, ".zip");
 
-                string zipFile = Path.ChangeExtension(options.InputFile, ".zip");
                 try
                 {
-                    Console.WriteLine($"步骤1/4: 准备临时文件 {zipFile}");
+                    Console.WriteLine($"[1/4] 创建临时文件: {zipFile}");
                     File.Copy(options.InputFile, zipFile, true);
 
-                    Console.WriteLine("步骤2/4: 打开压缩包验证结构");
+                    Console.WriteLine("[2/4] 打开压缩包验证结构");
                     using (var fs = File.OpenRead(zipFile))
                     using (var zip = new ZipFile(fs))
                     {
                         zip.Password = ZipPassword;
-                        
-                        // 验证文件注释
-                        Console.WriteLine("步骤3/4: 验证文件元数据");
+
+                        Console.WriteLine("[3/4] 验证文件元数据");
                         var encryptedHash = zip.ZipFileComment;
                         if (string.IsNullOrEmpty(encryptedHash))
                         {
-                            Console.WriteLine("✖ 错误：文件注释丢失（可能不是有效的PMR文件）");
+                            Console.WriteLine("✖ 错误：文件注释丢失（非标准PMR文件）");
                             return 3;
                         }
 
-                        // 解压文件
-                        Console.WriteLine($"步骤4/4: 解压到 {extractDir}");
+                        Console.WriteLine($"[4/4] 解压到目录: {extractDir}");
                         Directory.CreateDirectory(extractDir);
                         foreach (ZipEntry entry in zip)
                         {
@@ -98,48 +95,39 @@ namespace PMRValidator
                             {
                                 entryStream.CopyTo(fsOutput);
                             }
-                            Console.WriteLine("[完成]");
+                            Console.WriteLine("[OK]");
                         }
 
-                        // 计算哈希并验证
                         Console.WriteLine("\n验证文件完整性...");
                         var actualHash = CalculateDirectoryHash(extractDir);
                         var decryptedHash = DecryptHash(encryptedHash);
 
-                        Console.WriteLine($"预期哈希: {decryptedHash}");
-                        Console.WriteLine($"实际哈希: {actualHash}");
+                        Console.WriteLine($"预期哈希值\t: {decryptedHash}");
+                        Console.WriteLine($"实际哈希值\t: {actualHash}");
 
                         if (actualHash != decryptedHash)
                         {
-                            Console.WriteLine("\n✖ 验证失败：文件哈希不匹配（可能被篡改）");
+                            Console.WriteLine("\n✖ 验证失败：文件内容已被篡改");
                             return 4;
                         }
                     }
 
-                    Console.WriteLine("\n✔ 验证成功：文件完整且未被篡改");
+                    Console.WriteLine("\n✔ 验证成功：文件完整且未被修改");
                     return 0;
                 }
                 finally
                 {
-                    Console.WriteLine("\n清理临时文件...");
-                    if (File.Exists(zipFile))
-                    {
-                        File.Delete(zipFile);
-                        Console.WriteLine($"已删除临时文件: {zipFile}");
-                    }
-                    if (tempExtract && Directory.Exists(extractDir))
-                    {
-                        Directory.Delete(extractDir, true);
-                        Console.WriteLine($"已清理临时目录: {extractDir}");
-                    }
+                    Console.WriteLine("\n清理临时资源...");
+                    SafeDelete(zipFile);
+                    if (tempExtract) SafeDelete(extractDir, true);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("\n‼ 发生未处理异常:");
-                Console.WriteLine($"类型: {ex.GetType().Name}");
-                Console.WriteLine($"信息: {ex.Message}");
-                Console.WriteLine($"堆栈:\n{ex.StackTrace}");
+                Console.WriteLine("\n‼ 严重错误：");
+                Console.WriteLine($"错误类型\t: {ex.GetType().Name}");
+                Console.WriteLine($"错误信息\t: {ex.Message}");
+                Console.WriteLine($"堆栈跟踪\t:\n{ex.StackTrace}");
                 return 5;
             }
         }
@@ -147,7 +135,7 @@ namespace PMRValidator
         static string CalculateDirectoryHash(string path)
         {
             using var md5 = MD5.Create();
-            var files = Directory.GetFiles(path, "*", SearchOption.AllDirectories)
+            var files = Directory.GetFiles(path, "ProcessLog_*.csv")
                              .OrderBy(p => p).ToList();
 
             foreach (var file in files)
@@ -162,14 +150,14 @@ namespace PMRValidator
             }
             
             md5.TransformFinalBlock(new byte[0], 0, 0);
-            return BitConverter.ToString(md5.Hash!).Replace("-", "").ToLower(); // 添加null包容符
+            return BitConverter.ToString(md5.Hash!).Replace("-", "").ToLower();
         }
 
         static string DecryptHash(string encryptedHash)
         {
             using var aes = Aes.Create();
             aes.Key = DeriveKey(CryptoKey);
-            aes.IV = new byte[16];
+            aes.IV = FixedIV;
             
             using var decryptor = aes.CreateDecryptor();
             var encryptedBytes = Convert.FromBase64String(encryptedHash);
@@ -181,6 +169,27 @@ namespace PMRValidator
         {
             using var sha256 = SHA256.Create();
             return sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+        }
+
+        static void SafeDelete(string path, bool isDirectory = false)
+        {
+            try
+            {
+                if (isDirectory && Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                    Console.WriteLine($"已删除目录: {path}");
+                }
+                else if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    Console.WriteLine($"已删除文件: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"清理失败: {path} - {ex.Message}");
+            }
         }
     }
 }

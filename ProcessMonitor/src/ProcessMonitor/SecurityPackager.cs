@@ -11,19 +11,20 @@ namespace ProcessMonitor
     {
         const string CryptoKey = "cppuapa";
         const string ZipPassword = "CPPUAPA";
+        private static readonly byte[] FixedIV = 
+            new byte[16] { 0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x10 };
         
         public static void PackageLogs(string sourceDir)
         {
             try
             {
+                CleanTempFiles(sourceDir);
+                
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                 var outputFile = Path.Combine(desktopPath, $"MonitorFile_{timestamp}.pmr");
 
-                // 计算目录哈希
                 var hash = CalculateDirectoryHash(sourceDir);
-                
-                // AES加密哈希值
                 var encryptedHash = EncryptHash(hash);
                 
                 using (var fs = new FileStream(outputFile, FileMode.Create))
@@ -33,16 +34,15 @@ namespace ProcessMonitor
                     zip.SetLevel(9);
                     zip.UseZip64 = UseZip64.Off;
 
-                    var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories)
+                    var files = Directory.GetFiles(sourceDir, "ProcessLog_*.csv")
                                      .OrderBy(p => p).ToList();
 
                     foreach (var file in files)
                     {
-                        var entryName = Path.GetRelativePath(sourceDir, file);
-                        var entry = new ZipEntry(entryName)
+                        var entry = new ZipEntry(Path.GetFileName(file))
                         {
                             DateTime = DateTime.Now,
-                            AESKeySize = 256 // 正确设置AES加密
+                            AESKeySize = 256
                         };
                         
                         using (var fileStream = File.OpenRead(file))
@@ -53,10 +53,9 @@ namespace ProcessMonitor
                         }
                     }
                     
-                    zip.SetComment(encryptedHash); // 最后设置注释
+                    zip.SetComment(encryptedHash);
                 }
 
-                // 验证打包完整性
                 if (!ValidatePackage(outputFile, encryptedHash))
                 {
                     File.Delete(outputFile);
@@ -70,20 +69,26 @@ namespace ProcessMonitor
             }
         }
 
+        private static void CleanTempFiles(string path)
+        {
+            foreach (var file in Directory.GetFiles(path, "*.tmp"))
+            {
+                try { File.Delete(file); } catch { }
+            }
+        }
+
         private static string CalculateDirectoryHash(string path)
         {
             using var md5 = MD5.Create();
-            var files = Directory.GetFiles(path, "*", SearchOption.AllDirectories)
+            var files = Directory.GetFiles(path, "ProcessLog_*.csv")
                              .OrderBy(p => p).ToList();
 
             foreach (var file in files)
             {
-                // 文件名哈希
                 var relativePath = Path.GetRelativePath(path, file);
                 var pathBytes = Encoding.UTF8.GetBytes(relativePath.ToLower());
                 md5.TransformBlock(pathBytes, 0, pathBytes.Length, null, 0);
                 
-                // 文件内容哈希
                 using var stream = File.OpenRead(file);
                 var contentHash = md5.ComputeHash(stream);
                 md5.TransformBlock(contentHash, 0, contentHash.Length, null, 0);
@@ -97,7 +102,7 @@ namespace ProcessMonitor
         {
             using var aes = Aes.Create();
             aes.Key = DeriveKey(CryptoKey);
-            aes.IV = new byte[16]; // 固定IV简化实现
+            aes.IV = FixedIV;
             
             using var encryptor = aes.CreateEncryptor();
             var hashBytes = Encoding.UTF8.GetBytes(hash);
@@ -110,10 +115,8 @@ namespace ProcessMonitor
             try
             {
                 using var fs = File.OpenRead(zipPath);
-                using var zip = new ZipFile(fs)
-                {
-                    Password = ZipPassword
-                };
+                using var zip = new ZipFile(fs);
+                zip.Password = ZipPassword;
                 return zip.ZipFileComment == expectedHash;
             }
             catch

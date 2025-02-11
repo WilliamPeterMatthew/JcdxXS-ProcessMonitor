@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using System.Security.Cryptography;
 
 namespace ProcessMonitor
 {
@@ -14,27 +15,11 @@ namespace ProcessMonitor
         private static System.Threading.Timer monitoringTimer;
         private static string currentLogPath;
         private static readonly object syncLock = new object();
-
-        // 添加监控时间字段
         private static DateTime _monitorStartTime;
-        private static DateTime _monitorLastUpdate;
 
-        // 添加日志目录属性
-        public static string LogDirectory => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ProcessMonitor");
-
-    
-        // 添加全局异常处理
         [STAThread]
         static void Main()
         {
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => 
-            {
-                SecurityPackager.PackageLogs(LogDirectory);
-                Environment.FailFast("Critical error", e.ExceptionObject as Exception);
-            };
-            
             ApplicationConfiguration.Initialize();
             Application.Run(new TrayApplicationContext());
         }
@@ -42,28 +27,18 @@ namespace ProcessMonitor
         public static void StartMonitoring(string logPath)
         {
             currentLogPath = logPath;
-            _monitorStartTime = DateTime.Now;
-            _monitorLastUpdate = _monitorStartTime;
+            _monitorStartTime = DateTime.UtcNow;
             processDict = new Dictionary<int, ProcessRecord>();
             Directory.CreateDirectory(Path.GetDirectoryName(logPath));
-
             InitializeProcessLog();
             monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000);
         }
 
         public static void StopMonitoring()
         {
-            try
-            {
-                monitoringTimer?.Dispose();
-                SaveToFile();
-                SecurityPackager.PackageLogs(LogDirectory);
-            }
-            catch (Exception ex)
-            {
-                File.AppendAllText(Path.Combine(LogDirectory, "error.log"), 
-                    $"[{DateTime.Now}] Exit error: {ex}\n");
-            }
+            monitoringTimer?.Dispose();
+            SaveToFile();
+            SecurityPackager.PackageLogs(LogDirectory);
         }
 
         private static void InitializeProcessLog()
@@ -74,13 +49,15 @@ namespace ProcessMonitor
                 {
                     try
                     {
+                        if (IsSystemProcess(process)) continue;
+
                         lock (syncLock)
                         {
                             processDict[process.Id] = new ProcessRecord
                             {
                                 Pid = process.Id,
                                 ProcessName = GetProcessNameSafe(process),
-                                StartTime = "-",
+                                StartTime = FormatUtcTime(DateTime.UtcNow),
                                 EndTime = "-"
                             };
                         }
@@ -106,20 +83,22 @@ namespace ProcessMonitor
 
                 foreach (var process in currentProcesses)
                 {
-                    try { activePids.Add(process.Id); }
+                    try 
+                    { 
+                        if (IsSystemProcess(process)) continue;
+                        activePids.Add(process.Id); 
+                    }
                     catch { /* 忽略无效进程 */ }
                 }
 
                 lock (syncLock)
                 {
-                    // 处理退出的进程（仅首次标记退出时间）
                     var exitedPids = processDict.Keys.Except(activePids).ToList();
                     if (exitedPids.Count > 0)
                     {
-                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                        var timestamp = FormatUtcTime(DateTime.UtcNow);
                         foreach (var pid in exitedPids)
                         {
-                            // 仅当退出时间未设置时更新
                             if (processDict[pid].EndTime == "-")
                             {
                                 processDict[pid].EndTime = timestamp;
@@ -128,18 +107,19 @@ namespace ProcessMonitor
                         }
                     }
 
-                    // 处理新进程（保持原有逻辑）
                     foreach (var process in currentProcesses)
                     {
                         try
                         {
+                            if (IsSystemProcess(process)) continue;
+
                             if (!processDict.ContainsKey(process.Id))
                             {
                                 processDict[process.Id] = new ProcessRecord
                                 {
                                     Pid = process.Id,
                                     ProcessName = GetProcessNameSafe(process),
-                                    StartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                                    StartTime = FormatUtcTime(DateTime.UtcNow),
                                     EndTime = "-"
                                 };
                                 hasChanges = true;
@@ -163,19 +143,23 @@ namespace ProcessMonitor
             {
                 try
                 {
-                    _monitorLastUpdate = DateTime.Now;
-                    
+                    var records = processDict.Values
+                        .Select(r => new {
+                            r.Pid,
+                            ProcessName = Path.GetFileName(r.ProcessName), // 标准化进程名
+                            r.StartTime,
+                            r.EndTime
+                        })
+                        .ToList();
+
                     using var writer = new StreamWriter(currentLogPath, false);
-                    // 只在文件头记录时间范围
-                    writer.WriteLine($"MonitorPeriod,{_monitorStartTime:yyyy-MM-dd HH:mm:ss},{_monitorLastUpdate:yyyy-MM-dd HH:mm:ss}");
                     writer.WriteLine("PID,ProcessName,StartTime,EndTime");
-                    
-                    foreach (var record in processDict.Values.OrderBy(r => r.Pid))
+                    foreach (var record in records.OrderBy(r => r.Pid))
                     {
                         writer.WriteLine($"{record.Pid}," +
-                                    $"{EscapeCsv(record.ProcessName)}," +
-                                    $"{EscapeCsv(record.StartTime)}," +
-                                    $"{EscapeCsv(record.EndTime)}");
+                                       $"{EscapeCsv(record.ProcessName)}," +
+                                       $"{EscapeCsv(record.StartTime)}," +
+                                       $"{EscapeCsv(record.EndTime)}");
                     }
                 }
                 catch (Exception ex)
@@ -185,10 +169,32 @@ namespace ProcessMonitor
             }
         }
 
+        private static bool IsSystemProcess(Process process)
+        {
+            try
+            {
+                var name = process.ProcessName.ToLower();
+                return name.StartsWith("system") || 
+                       name == "svchost" ||
+                       name == "dllhost" ||
+                       name == "runtimebroker" ||
+                       name == "taskhostw";
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         private static string GetProcessNameSafe(Process process)
         {
             try { return process.ProcessName; }
             catch { return "Unknown"; }
+        }
+
+        private static string FormatUtcTime(DateTime time)
+        {
+            return time.ToString("yyyy-MM-ddTHH:mm:ssZ");
         }
 
         private static string EscapeCsv(string input)
@@ -198,5 +204,17 @@ namespace ProcessMonitor
                 ? $"\"{input.Replace("\"", "\"\"")}\"" 
                 : input;
         }
+
+        public static string LogDirectory => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ProcessMonitor");
+    }
+
+    public class ProcessRecord
+    {
+        public int Pid { get; set; }
+        public string ProcessName { get; set; }
+        public string StartTime { get; set; }
+        public string EndTime { get; set; }
     }
 }
