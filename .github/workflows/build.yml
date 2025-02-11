@@ -46,7 +46,6 @@ jobs:
   build-validator:
     name: Build PMR Validator
     runs-on: windows-latest
-    needs: build-monitor
     strategy:
       matrix:
         platform: [x86, x64]

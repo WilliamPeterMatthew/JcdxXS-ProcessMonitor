@@ -1,202 +1,154 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Windows.Forms;
+using System.Security.Cryptography;
+using System.Text;
+using CommandLine;
+using ICSharpCode.SharpZipLib.Zip;
 
-namespace ProcessMonitor
+namespace PMRValidator
 {
-    static class Program
+    class Program
     {
-        private static Dictionary<int, ProcessRecord> processDict;
-        private static System.Threading.Timer monitoringTimer;
-        private static string currentLogPath;
-        private static readonly object syncLock = new object();
-
-        // 添加监控时间字段
-        private static DateTime _monitorStartTime;
-        private static DateTime _monitorLastUpdate;
-
-        // 添加日志目录属性
-        public static string LogDirectory => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ProcessMonitor");
-
-    
-        // 添加全局异常处理
-        [STAThread]
-        static void Main()
+        public class Options
         {
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => 
-            {
-                SecurityPackager.PackageLogs(LogDirectory);
-                Environment.FailFast("Critical error", e.ExceptionObject as Exception);
-            };
-            
-            ApplicationConfiguration.Initialize();
-            Application.Run(new TrayApplicationContext());
+            [Value(0, Required = true, HelpText = "Input .pmr file path")]
+            public string InputFile { get; set; }
+
+            [Option('e', "extract", HelpText = "Extract directory")]
+            public string ExtractPath { get; set; }
         }
 
-        public static void StartMonitoring(string logPath)
-        {
-            currentLogPath = logPath;
-            _monitorStartTime = DateTime.Now;
-            _monitorLastUpdate = _monitorStartTime;
-            processDict = new Dictionary<int, ProcessRecord>();
-            Directory.CreateDirectory(Path.GetDirectoryName(logPath));
+        const string ZipPassword = "CPPUAPA";
+        const string CryptoKey = "cppuapa";
 
-            InitializeProcessLog();
-            monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000);
+        static int Main(string[] args)
+        {
+            return Parser.Default.ParseArguments<Options>(args).MapResult(
+                options => RunValidation(options),
+                _ => 1
+            );
         }
 
-        public static void StopMonitoring()
+        static int RunValidation(Options options)
         {
             try
             {
-                monitoringTimer?.Dispose();
-                SaveToFile();
-                SecurityPackager.PackageLogs(LogDirectory);
-            }
-            catch (Exception ex)
-            {
-                File.AppendAllText(Path.Combine(LogDirectory, "error.log"), 
-                    $"[{DateTime.Now}] Exit error: {ex}\n");
-            }
-        }
-
-        private static void InitializeProcessLog()
-        {
-            try
-            {
-                foreach (var process in Process.GetProcesses())
+                // 验证输入文件
+                if (!File.Exists(options.InputFile))
                 {
-                    try
-                    {
-                        lock (syncLock)
-                        {
-                            processDict[process.Id] = new ProcessRecord
-                            {
-                                Pid = process.Id,
-                                ProcessName = GetProcessNameSafe(process),
-                                StartTime = "-",
-                                EndTime = "-"
-                            };
-                        }
-                    }
-                    catch { /* 忽略无效进程 */ }
-                }
-                SaveToFile();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"初始化失败: {ex.Message}", "错误", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private static void CheckProcessChanges(object state)
-        {
-            try
-            {
-                var currentProcesses = Process.GetProcesses();
-                var activePids = new HashSet<int>();
-                bool hasChanges = false;
-
-                foreach (var process in currentProcesses)
-                {
-                    try { activePids.Add(process.Id); }
-                    catch { /* 忽略无效进程 */ }
+                    Console.WriteLine($"错误：文件 {options.InputFile} 不存在");
+                    return 2;
                 }
 
-                lock (syncLock)
-                {
-                    // 处理退出的进程（仅首次标记退出时间）
-                    var exitedPids = processDict.Keys.Except(activePids).ToList();
-                    if (exitedPids.Count > 0)
-                    {
-                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                        foreach (var pid in exitedPids)
-                        {
-                            // 仅当退出时间未设置时更新
-                            if (processDict[pid].EndTime == "-")
-                            {
-                                processDict[pid].EndTime = timestamp;
-                                hasChanges = true;
-                            }
-                        }
-                    }
+                // 准备解压路径
+                var tempExtract = string.IsNullOrEmpty(options.ExtractPath);
+                var extractDir = options.ExtractPath ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
-                    // 处理新进程（保持原有逻辑）
-                    foreach (var process in currentProcesses)
-                    {
-                        try
-                        {
-                            if (!processDict.ContainsKey(process.Id))
-                            {
-                                processDict[process.Id] = new ProcessRecord
-                                {
-                                    Pid = process.Id,
-                                    ProcessName = GetProcessNameSafe(process),
-                                    StartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                                    EndTime = "-"
-                                };
-                                hasChanges = true;
-                            }
-                        }
-                        catch { /* 忽略无效进程 */ }
-                    }
-                }
-
-                if (hasChanges) SaveToFile();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"监控错误: {ex}");
-            }
-        }
-
-        private static void SaveToFile()
-        {
-            lock (syncLock)
-            {
                 try
                 {
-                    _monitorLastUpdate = DateTime.Now;
-                    
-                    using var writer = new StreamWriter(currentLogPath, false);
-                    // 只在文件头记录时间范围
-                    writer.WriteLine($"MonitorPeriod,{_monitorStartTime:yyyy-MM-dd HH:mm:ss},{_monitorLastUpdate:yyyy-MM-dd HH:mm:ss}");
-                    writer.WriteLine("PID,ProcessName,StartTime,EndTime");
-                    
-                    foreach (var record in processDict.Values.OrderBy(r => r.Pid))
+                    // 重命名文件并解压
+                    var zipFile = Path.ChangeExtension(options.InputFile, ".zip");
+                    File.Copy(options.InputFile, zipFile, true);
+
+                    // 解压文件
+                    using (var fs = File.OpenRead(zipFile))
+                    using (var zip = new ZipFile(fs))
                     {
-                        writer.WriteLine($"{record.Pid}," +
-                                    $"{EscapeCsv(record.ProcessName)}," +
-                                    $"{EscapeCsv(record.StartTime)}," +
-                                    $"{EscapeCsv(record.EndTime)}");
+                        zip.Password = ZipPassword;
+                        
+                        // 获取加密哈希
+                        var encryptedHash = zip.ZipFileComment;
+                        if (string.IsNullOrEmpty(encryptedHash))
+                        {
+                            Console.WriteLine("错误：文件注释丢失");
+                            return 3;
+                        }
+
+                        // 解压文件
+                        Directory.CreateDirectory(extractDir);
+                        foreach (ZipEntry entry in zip)
+                        {
+                            var targetPath = Path.Combine(extractDir, entry.Name);
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                            
+                            using (var entryStream = zip.GetInputStream(entry))
+                            using (var fsOutput = File.Create(targetPath))
+                            {
+                                entryStream.CopyTo(fsOutput);
+                            }
+                        }
+
+                        // 计算哈希并验证
+                        var actualHash = CalculateDirectoryHash(extractDir);
+                        var decryptedHash = DecryptHash(encryptedHash);
+
+                        Console.WriteLine($"预期哈希: {decryptedHash}");
+                        Console.WriteLine($"实际哈希: {actualHash}");
+
+                        if (actualHash != decryptedHash)
+                        {
+                            Console.WriteLine("验证失败：文件已被篡改");
+                            return 4;
+                        }
+                    }
+
+                    Console.WriteLine("验证成功：文件完整");
+                    return 0;
+                }
+                finally
+                {
+                    // 清理临时文件
+                    File.Delete(zipFile);
+                    if (tempExtract)
+                    {
+                        Directory.Delete(extractDir, true);
                     }
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"保存失败: {ex}");
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"验证错误: {ex.Message}");
+                return 5;
             }
         }
 
-        private static string GetProcessNameSafe(Process process)
+        static string CalculateDirectoryHash(string path)
         {
-            try { return process.ProcessName; }
-            catch { return "Unknown"; }
+            using var md5 = MD5.Create();
+            var files = Directory.GetFiles(path, "*", SearchOption.AllDirectories)
+                             .OrderBy(p => p).ToList();
+
+            foreach (var file in files)
+            {
+                var relativePath = Path.GetRelativePath(path, file);
+                var pathBytes = Encoding.UTF8.GetBytes(relativePath.ToLower());
+                md5.TransformBlock(pathBytes, 0, pathBytes.Length, null, 0);
+                
+                using var stream = File.OpenRead(file);
+                var contentHash = md5.ComputeHash(stream);
+                md5.TransformBlock(contentHash, 0, contentHash.Length, null, 0);
+            }
+            
+            md5.TransformFinalBlock(new byte[0], 0, 0);
+            return BitConverter.ToString(md5.Hash).Replace("-", "").ToLower();
         }
 
-        private static string EscapeCsv(string input)
+        static string DecryptHash(string encryptedHash)
         {
-            if (string.IsNullOrEmpty(input)) return "";
-            return input.Contains(",") || input.Contains("\"") || input.Contains("\n") 
-                ? $"\"{input.Replace("\"", "\"\"")}\"" 
-                : input;
+            using var aes = Aes.Create();
+            aes.Key = DeriveKey(CryptoKey);
+            aes.IV = new byte[16];
+            
+            using var decryptor = aes.CreateDecryptor();
+            var encryptedBytes = Convert.FromBase64String(encryptedHash);
+            var decrypted = decryptor.TransformFinalBlock(encryptedBytes, 0, encryptedBytes.Length);
+            return Encoding.UTF8.GetString(decrypted);
+        }
+
+        static byte[] DeriveKey(string password)
+        {
+            using var sha256 = SHA256.Create();
+            return sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
         }
     }
 }
