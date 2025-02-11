@@ -1,5 +1,7 @@
+# validate.py
 import argparse
 import os
+import sys
 import hashlib
 import tempfile
 import shutil
@@ -8,74 +10,144 @@ from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 import base64
 
+# 增强的颜色输出支持
+class Color:
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    RESET = '\033[0m'
+
+def print_color(text, color=Color.WHITE, flush=True):
+    """跨平台颜色输出支持"""
+    if sys.platform.startswith('win'):
+        try:
+            from ctypes import windll
+            windll.kernel32.SetConsoleMode(windll.kernel32.GetStdHandle(-11), 7)
+        except:
+            pass
+    
+    print(f"{color}{text}{Color.RESET}")
+    if flush:
+        sys.stdout.flush()
+
 def main():
-    parser = argparse.ArgumentParser(description='Validate a PMR file integrity.')
-    parser.add_argument('pmr_file', help='Path to the PMR file to validate')
-    parser.add_argument('-e', '--extract-dir', help='Directory to extract files (optional)')
-    args = parser.parse_args()
+    # 增强的参数解析
+    parser = argparse.ArgumentParser(
+        description=f'{Color.CYAN}PMR文件完整性验证工具{Color.RESET}',
+        add_help=False,
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument(
+        'pmr_file', 
+        nargs='?',
+        help='要验证的PMR文件路径'
+    )
+    parser.add_argument(
+        '-e', '--extract-dir',
+        help='指定解压目录（可选）'
+    )
+    
+    # 手动处理帮助信息
+    if len(sys.argv) == 1 or '-h' in sys.argv or '--help' in sys.argv:
+        help_text = f"""
+{Color.YELLOW}使用方法：{Color.RESET}
+  validate.py [pmr_file] [-e EXTRACT_DIR]
 
-    # 读取ZIP文件注释（加密哈希值）
+{Color.YELLOW}示例：{Color.RESET}
+  validate.py Moni_111_222.pmr
+  validate.py Moni_111_222.pmr -e ./extracted
+"""
+        print_color(help_text, Color.CYAN)
+        sys.exit(0)
+
     try:
-        with pyzipper.AESZipFile(args.pmr_file, 'r') as zf:
-            zf.setpassword(b'CPPUAPA')
-            stored_hash = zf.comment.decode('utf-8')
+        args = parser.parse_args()
+        if not args.pmr_file:
+            raise ValueError("必须指定PMR文件路径")
     except Exception as e:
-        print(f"❌ 文件读取失败: {str(e)}")
-        return
+        print_color(f"❌ 参数错误: {str(e)}", Color.RED)
+        sys.exit(1)
 
-    # 处理解压目录
-    temp_dir = None
-    extract_to = args.extract_dir
-    if not extract_to:
-        temp_dir = tempfile.mkdtemp()
-        extract_to = temp_dir
-    else:
-        os.makedirs(extract_to, exist_ok=True)
-
-    # 解压文件
+    # 验证流程
     try:
-        with pyzipper.AESZipFile(args.pmr_file, 'r') as zf:
-            zf.setpassword(b'CPPUAPA')
-            zf.extractall(path=extract_to)
-    except Exception as e:
-        print(f"❌ 解压失败: {str(e)}")
-        if temp_dir:
+        # 阶段1：读取PMR文件
+        print_color("[1/4] 正在读取PMR文件...", Color.BLUE)
+        try:
+            with pyzipper.AESZipFile(args.pmr_file, 'r') as zf:
+                zf.setpassword(b'CPPUAPA')
+                stored_hash = zf.comment.decode('utf-8')
+                print_color(f"  找到存储的加密哈希: {stored_hash[:16]}...", Color.CYAN)
+        except Exception as e:
+            print_color(f"❌ 文件读取失败: {str(e)}", Color.RED)
+            sys.exit(2)
+
+        # 阶段2：解压文件
+        temp_dir = None
+        extract_to = args.extract_dir
+        if not extract_to:
+            temp_dir = tempfile.mkdtemp()
+            extract_to = temp_dir
+            print_color(f"[2/4] 创建临时目录: {extract_to}", Color.BLUE)
+        else:
+            os.makedirs(extract_to, exist_ok=True)
+            print_color(f"[2/4] 使用指定目录: {extract_to}", Color.BLUE)
+
+        try:
+            with pyzipper.AESZipFile(args.pmr_file, 'r') as zf:
+                zf.setpassword(b'CPPUAPA')
+                zf.extractall(path=extract_to)
+                print_color(f"  解压完成，共 {len(zf.infolist())} 个文件", Color.CYAN)
+        except Exception as e:
+            print_color(f"❌ 解压失败: {str(e)}", Color.RED)
+            if temp_dir:
+                shutil.rmtree(temp_dir)
+            sys.exit(3)
+
+        # 阶段3：计算哈希
+        print_color("[3/4] 正在计算目录哈希...", Color.BLUE)
+        try:
+            current_hash = calculate_directory_hash(extract_to)
+            print_color(f"  计算得到原始哈希: {current_hash[:16]}...", Color.CYAN)
+        except Exception as e:
+            print_color(f"❌ 哈希计算失败: {str(e)}", Color.RED)
+            if temp_dir:
+                shutil.rmtree(temp_dir)
+            sys.exit(4)
+
+        # 阶段4：验证哈希
+        print_color("[4/4] 正在验证完整性...", Color.BLUE)
+        try:
+            encrypted_current = encrypt_hash(current_hash)
+            print_color(f"  加密后的计算哈希: {encrypted_current[:16]}...", Color.CYAN)
+        except Exception as e:
+            print_color(f"❌ 哈希加密失败: {str(e)}", Color.RED)
+            if temp_dir:
+                shutil.rmtree(temp_dir)
+            sys.exit(5)
+
+        # 结果验证
+        if encrypted_current == stored_hash:
+            print_color("✅ 验证成功：文件完整未被篡改", Color.GREEN)
+        else:
+            print_color("❌ 验证失败：哈希值不匹配", Color.RED)
+            print_color(f"  存储值: {stored_hash}", Color.YELLOW)
+            print_color(f"  计算值: {encrypted_current}", Color.YELLOW)
+
+    finally:
+        # 清理临时目录
+        if temp_dir and os.path.exists(temp_dir):
+            print_color(f"清理临时目录: {temp_dir}", Color.CYAN)
             shutil.rmtree(temp_dir)
-        return
-
-    # 计算当前哈希
-    try:
-        current_hash = calculate_directory_hash(extract_to)
-    except Exception as e:
-        print(f"❌ 哈希计算失败: {str(e)}")
-        if temp_dir:
-            shutil.rmtree(temp_dir)
-        return
-
-    # 加密当前哈希
-    try:
-        encrypted_current = encrypt_hash(current_hash)
-    except Exception as e:
-        print(f"❌ 哈希加密失败: {str(e)}")
-        if temp_dir:
-            shutil.rmtree(temp_dir)
-        return
-
-    # 验证结果
-    if encrypted_current == stored_hash:
-        print("✅ 验证成功：文件完整未被篡改")
-    else:
-        print(f"❌ 验证失败：哈希值不匹配\n存储值: {stored_hash}\n计算值: {encrypted_current}")
-
-    # 清理临时目录
-    if temp_dir:
-        shutil.rmtree(temp_dir)
 
 def calculate_directory_hash(directory):
-    """计算目录哈希（与C#实现一致）"""
+    """与C#实现完全一致的目录哈希计算"""
     md5 = hashlib.md5()
     
-    # 获取并排序文件列表（相对路径小写）
+    # 生成排序的文件列表
     file_list = []
     for root, _, files in os.walk(directory):
         for file in files:
@@ -98,7 +170,7 @@ def calculate_directory_hash(directory):
     return md5.hexdigest().lower()
 
 def encrypt_hash(hash_str):
-    """AES加密哈希值（与C#实现一致）"""
+    """与C#实现完全一致的AES加密"""
     # 生成密钥
     sha256 = SHA256.new()
     sha256.update(b'cppuapa')
