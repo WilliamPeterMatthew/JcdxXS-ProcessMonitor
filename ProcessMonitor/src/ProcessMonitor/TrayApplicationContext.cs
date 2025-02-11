@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Threading;
 using System.IO;
-using System.Reflection; // 添加关键引用
+using System.Reflection;
 
 namespace ProcessMonitor
 {
@@ -15,7 +15,7 @@ namespace ProcessMonitor
 
         public TrayApplicationContext()
         {
-            // 单实例检测（添加Global前缀确保跨会话）
+            // 单实例检测
             bool createdNew;
             appMutex = new Mutex(true, @"Global\ProcessMonitor", out createdNew);
             
@@ -23,10 +23,7 @@ namespace ProcessMonitor
             {
                 MessageBox.Show("程序已在运行中", "提示", 
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
-                
-                // 完全退出应用程序
-                Application.Exit();
-                Environment.Exit(0);
+                ExitThread();
                 return;
             }
 
@@ -40,7 +37,7 @@ namespace ProcessMonitor
             // 创建托盘图标
             trayIcon = new NotifyIcon
             {
-                Icon = GetEmbeddedIcon(),
+                Icon = GetEmbeddedIcon("ProcessMonitor.Resources.app.ico"),
                 Text = "进程监控器",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
@@ -52,13 +49,12 @@ namespace ProcessMonitor
             Program.StartMonitoring(logFilePath);
         }
 
-        private Icon GetEmbeddedIcon()
+        private Icon GetEmbeddedIcon(string resourceName)
         {
             try
             {
-                using var stream = Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream("ProcessMonitor.Resources.app.ico");
-                return new Icon(stream);
+                using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+                return stream != null ? new Icon(stream) : SystemIcons.Application;
             }
             catch
             {
@@ -81,9 +77,7 @@ namespace ProcessMonitor
             Program.StopMonitoring();
             appMutex?.ReleaseMutex();
             Application.Exit();
-            
-            // 立即退出不等待
-            Environment.Exit(0); 
+            Environment.Exit(0);
         }
 
         protected override void Dispose(bool disposing)

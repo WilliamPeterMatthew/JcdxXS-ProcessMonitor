@@ -146,7 +146,7 @@ namespace ProcessMonitor
                     var records = processDict.Values
                         .Select(r => new {
                             r.Pid,
-                            ProcessName = Path.GetFileName(r.ProcessName), // 标准化进程名
+                            ProcessName = Path.GetFileName(r.ProcessName),
                             r.StartTime,
                             r.EndTime
                         })
@@ -208,13 +208,5 @@ namespace ProcessMonitor
         public static string LogDirectory => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "ProcessMonitor");
-    }
-
-    public class ProcessRecord
-    {
-        public int Pid { get; set; }
-        public string ProcessName { get; set; }
-        public string StartTime { get; set; }
-        public string EndTime { get; set; }
     }
 }
