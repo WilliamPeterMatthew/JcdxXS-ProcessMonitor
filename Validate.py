@@ -1,11 +1,6 @@
 import argparse
 import os
-<<<<<<< HEAD
 import pyzipper
-=======
-import zipfile
-from Crypto.Cipher import AES
->>>>>>> 5f99706171c77ec068ff56bd9929f4acdca6c46f
 import hashlib
 import shutil
 
@@ -16,27 +11,16 @@ AES_IV = b'\x00' * 16  # 固定的 IV（16 字节全零）
 
 def extract_zip(zip_path, extract_to):
     """解压带密码的 ZIP 文件"""
-<<<<<<< HEAD
     with pyzipper.AESZipFile(zip_path, 'r', encryption=pyzipper.WZ_AES) as zf:
         zf.setpassword(ZIP_PASSWORD)
         zf.extractall(extract_to)
-=======
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.setpassword(ZIP_PASSWORD)
-        zip_ref.extractall(extract_to)
->>>>>>> 5f99706171c77ec068ff56bd9929f4acdca6c46f
         print(f'解压完成，文件已提取到 {extract_to}')
 
 def get_zip_comment(zip_path):
     """获取 ZIP 文件的注释"""
-<<<<<<< HEAD
     with pyzipper.AESZipFile(zip_path, 'r', encryption=pyzipper.WZ_AES) as zf:
         zf.setpassword(ZIP_PASSWORD)
         return zf.comment.decode('utf-8')
-=======
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        return zip_ref.comment.decode('utf-8')
->>>>>>> 5f99706171c77ec068ff56bd9929f4acdca6c46f
 
 def decrypt_hash(encrypted_hash):
     """解密 AES 加密的哈希值"""
@@ -76,14 +60,11 @@ def main():
     parser.add_argument('-e', '--extract', help='解压目录路径')
     args = parser.parse_args()
 
-<<<<<<< HEAD
     # 检查是否指定了 PMR 文件路径
     if not args.pmr_file:
         print('错误：未指定 PMR 文件路径。请使用 -h 或 --help 查看帮助信息。')
         exit(1)
 
-=======
->>>>>>> 5f99706171c77ec068ff56bd9929f4acdca6c46f
     # 如果未指定解压目录，则使用临时目录
     if not args.extract:
         temp_dir = 'temp_extracted_files'
