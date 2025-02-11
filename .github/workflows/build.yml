@@ -1,9 +1,12 @@
-name: Build Process Monitor
+name: Build All
 
-on: [push, pull_request]
-
+on:
+  push:
+    branches:
+      - csharp
 jobs:
-  build:
+  build-monitor:
+    name: Build Process Monitor
     runs-on: windows-latest
     strategy:
       matrix:
@@ -17,26 +20,15 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Verify resources
-      run: |
-        if (-not (Test-Path "resources/app.ico")) {
-            Write-Error "图标文件未找到！当前路径：$pwd"
-            Get-ChildItem -Recurse
-            exit 1
-        }
-      shell: powershell
 
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
-    - name: Build
+    - name: Build Process Monitor
       run: |
-        dotnet publish src/ProcessMonitor/ProcessMonitor.csproj `
+        dotnet publish ProcessMonitor/src/ProcessMonitor/ProcessMonitor.csproj `
           -c Release `
           -r ${{ matrix.runtime_id }} `
           --self-contained true `
@@ -45,8 +37,47 @@ jobs:
           /p:WindowsSDKVersion=10.0.19041.0
       shell: powershell
 
-    - name: Upload Artifact
+    - name: Upload Monitor Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ProcessMonitor-${{ matrix.platform }}
-        path: src/ProcessMonitor/bin/${{ matrix.platform }}/Release/net8.0-windows/${{ matrix.runtime_id }}/publish/*
+        path: ProcessMonitor/src/ProcessMonitor/bin/${{ matrix.platform }}/Release/net8.0-windows/${{ matrix.runtime_id }}/publish/*
+
+  build-validator:
+    name: Build PMR Validator
+    runs-on: windows-latest
+    needs: build-monitor
+    strategy:
+      matrix:
+        platform: [x86, x64]
+        include:
+          - platform: x86
+            runtime_id: win-x86
+          - platform: x64
+            runtime_id: win-x64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Build Validator
+      run: |
+        dotnet publish PMRValidator/src/PMRValidator/PMRValidator.csproj `
+          -c Release `
+          -r ${{ matrix.runtime_id }} `
+          --self-contained true `
+          /p:PublishSingleFile=true `
+          /p:Platform=${{ matrix.platform }} `
+          /p:WindowsSDKVersion=10.0.19041.0
+      shell: powershell
+
+    - name: Upload Validator Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: PMRValidator-${{ matrix.platform }}
+        path: PMRValidator/src/PMRValidator/bin/${{ matrix.platform }}/Release/net8.0-windows/${{ matrix.runtime_id }}/publish/*

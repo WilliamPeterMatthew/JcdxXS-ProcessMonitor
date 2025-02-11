@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>x86;x64</Platforms>
+    
+    <!-- Windows配置 -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\resources\app.ico</ApplicationIcon>
+    
+    <!-- SDK版本设置 -->
+    <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    
+    <!-- 兼容性设置 -->
+    <SupportedOSPlatformVersion>6.1</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <EmbeddedResource Include="..\..\resources\app.ico">
+      <Link>Resources\app.ico</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="app.manifest" />
+  </ItemGroup>
+
+</Project>
