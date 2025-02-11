@@ -34,7 +34,7 @@ jobs:
 
     - name: Build executable with PyInstaller for ${{ matrix.arch }}
       run: |
-        pyinstaller --onefile --console --icon=resources\app.ico --add-data "resources\app.ico;." --add-data "c:\hostedtoolcache\windows\python\3.8.10\${{ matrix.arch }}\lib\site-packages\pyzipper;pyzipper"  --name "Validate-${{ matrix.arch }}" Validate.py
+        pyinstaller --onefile --console --icon=resources\app.ico --add-data "resources\app.ico;." --name "Validate-${{ matrix.arch }}" Validate.py
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
