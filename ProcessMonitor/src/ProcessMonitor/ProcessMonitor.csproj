@@ -6,6 +6,7 @@
     <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>11</LangVersion>
     <Platforms>x86;x64</Platforms>
     
     <!-- Windows配置 -->

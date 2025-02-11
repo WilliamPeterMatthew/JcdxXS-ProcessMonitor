@@ -11,9 +11,9 @@ namespace ProcessMonitor
 {
     static class Program
     {
-        private static Dictionary<int, ProcessRecord> processDict;
-        private static System.Threading.Timer monitoringTimer;
-        private static string currentLogPath;
+        private static Dictionary<int, ProcessRecord>? processDict;
+        private static System.Threading.Timer? monitoringTimer;
+        private static string? currentLogPath;
         private static readonly object syncLock = new object();
         private static DateTime _monitorStartTime;
 
@@ -29,7 +29,13 @@ namespace ProcessMonitor
             currentLogPath = logPath;
             _monitorStartTime = DateTime.UtcNow;
             processDict = new Dictionary<int, ProcessRecord>();
-            Directory.CreateDirectory(Path.GetDirectoryName(logPath));
+            
+            var dir = Path.GetDirectoryName(logPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
             InitializeProcessLog();
             monitoringTimer = new System.Threading.Timer(CheckProcessChanges, null, 0, 1000);
         }
@@ -73,7 +79,7 @@ namespace ProcessMonitor
             }
         }
 
-        private static void CheckProcessChanges(object state)
+        private static void CheckProcessChanges(object? state)
         {
             try
             {

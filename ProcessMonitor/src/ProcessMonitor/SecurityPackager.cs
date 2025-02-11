@@ -81,7 +81,7 @@ namespace ProcessMonitor
         {
             using var md5 = MD5.Create();
             var files = Directory.GetFiles(path, "ProcessLog_*.csv")
-                             .OrderBy(p => p).ToList();
+                            .OrderBy(p => p).ToList();
 
             foreach (var file in files)
             {
@@ -95,7 +95,7 @@ namespace ProcessMonitor
             }
             
             md5.TransformFinalBlock(new byte[0], 0, 0);
-            return BitConverter.ToString(md5.Hash).Replace("-", "").ToLower();
+            return BitConverter.ToString(md5.Hash!).Replace("-", "").ToLower(); // 添加 null 包容符
         }
 
         private static string EncryptHash(string hash)

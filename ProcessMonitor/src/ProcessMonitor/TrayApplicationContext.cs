@@ -9,13 +9,12 @@ namespace ProcessMonitor
 {
     public class TrayApplicationContext : ApplicationContext
     {
-        private readonly NotifyIcon trayIcon;
-        private static Mutex appMutex;
-        private readonly string logFilePath;
+        private readonly NotifyIcon? trayIcon; // 允许 null
+        private static Mutex? appMutex; // 允许 null
+        private readonly string? logFilePath; // 允许 null
 
         public TrayApplicationContext()
         {
-            // 单实例检测
             bool createdNew;
             appMutex = new Mutex(true, @"Global\ProcessMonitor", out createdNew);
             
@@ -27,14 +26,12 @@ namespace ProcessMonitor
                 return;
             }
 
-            // 初始化日志路径
             var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             logFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "ProcessMonitor",
                 $"ProcessLog_{timestamp}.csv");
 
-            // 创建托盘图标
             trayIcon = new NotifyIcon
             {
                 Icon = GetEmbeddedIcon("ProcessMonitor.Resources.app.ico"),
@@ -45,8 +42,10 @@ namespace ProcessMonitor
 
             trayIcon.ShowBalloonTip(3000, "监控启动", "后台监控已运行", ToolTipIcon.Info);
 
-            // 启动监控
-            Program.StartMonitoring(logFilePath);
+            if (logFilePath != null)
+            {
+                Program.StartMonitoring(logFilePath);
+            }
         }
 
         private Icon GetEmbeddedIcon(string resourceName)
