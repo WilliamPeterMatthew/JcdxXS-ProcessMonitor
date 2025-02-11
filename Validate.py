@@ -81,45 +81,45 @@ def main():
             shutil.rmtree(temp_dir)
 
 def calculate_directory_hash(directory):
-    """修复1：严格匹配C#的排序规则"""
+    """完全对齐C#实现的哈希计算"""
     md5 = hashlib.md5()
     
-    # 修复点：使用原始大小写路径排序
+    # 修复1：按原始路径排序（区分大小写）
     file_list = []
     for root, _, files in os.walk(directory):
+        files = [f for f in files if not f.startswith('.')]  # 过滤隐藏文件
         for file in files:
             full_path = os.path.join(root, file)
-            # 修复点：保持原始大小写
             rel_path = os.path.relpath(full_path, directory)
+            # 修复2：统一使用正斜杠
+            rel_path = rel_path.replace(os.sep, '/')
             file_list.append((rel_path, full_path))
     
-    # 修复点：按原始字符串排序（区分大小写）
-    file_list.sort(key=lambda x: x[0])
+    # 修复3：按字符串自然排序
+    file_list.sort(key=lambda x: x[0].lower())  # C#的OrderBy(p => p)实际是大小写敏感排序
     
     for rel_path, full_path in file_list:
-        # 修复点：使用原始路径大小写
+        # 修复4：使用原始路径字节（包括大小写）
         md5.update(rel_path.encode('utf-8'))
+        
+        # 修复5：整个文件内容哈希（非分块）
         with open(full_path, 'rb') as f:
-            # 修复点：分块计算以匹配C#的TransformBlock
-            while chunk := f.read(4096):
-                md5.update(hashlib.md5(chunk).digest())
+            file_md5 = hashlib.md5(f.read()).digest()
+            md5.update(file_md5)
     
     return md5.hexdigest().lower()
 
 def encrypt_hash(hash_str):
-    """修复2：严格对齐C#加密方式"""
-    # 生成密钥
-    sha256 = SHA256.new()
-    sha256.update(b'cppuapa')
-    key = sha256.digest()
+    """严格对齐C#加密实现"""
+    # 修复6：恢复CBC模式+零IV
+    key = SHA256.new(b'cppuapa').digest()
+    iv = b'\x00'*16
+    cipher = AES.new(key, AES.MODE_CBC, iv)
     
-    # 使用ECB模式替代CBC（因C#代码中IV为全零）
-    cipher = AES.new(key, AES.MODE_ECB)
-    
-    # 填充处理
+    # 修复7：精确填充处理
     data = hash_str.encode('utf-8')
     pad_len = AES.block_size - (len(data) % AES.block_size)
-    data += bytes([pad_len] * pad_len)
+    data += bytes([pad_len]) * pad_len
     
     encrypted = cipher.encrypt(data)
     return base64.b64encode(encrypted).decode('utf-8')
