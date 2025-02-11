@@ -3,6 +3,7 @@ import os
 import pyzipper
 import hashlib
 import shutil
+from Crypto.Cipher import AES  # 导入 AES 加密模块
 
 # 定义常量
 ZIP_PASSWORD = b'CPPUAPA'  # ZIP 文件的密码
